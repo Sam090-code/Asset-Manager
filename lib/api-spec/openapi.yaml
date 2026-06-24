@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Image-to-PDF Converter & Smart File Compressor API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: compress
+    description: File compression operations
+  - name: stats
+    description: Usage statistics
 paths:
   /healthz:
     get:
@@ -24,6 +28,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /compress:
+    post:
+      operationId: compressFile
+      tags: [compress]
+      summary: Compress a file
+      description: Uploads and compresses an image or PDF file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CompressInput"
+      responses:
+        "200":
+          description: Compression successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompressResult"
+        "400":
+          description: Invalid file or parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /files/{fileId}/download:
+    get:
+      operationId: downloadFile
+      tags: [compress]
+      summary: Download a processed file
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File binary content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get platform usage statistics
+      responses:
+        "200":
+          description: Usage statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +104,67 @@ components:
       required:
         - status
 
+    CompressInput:
+      type: object
+      required:
+        - level
+      properties:
+        level:
+          type: string
+          enum: [low, balanced, maximum]
+          description: Compression level
+
+    CompressResult:
+      type: object
+      required:
+        - fileId
+        - originalSize
+        - compressedSize
+        - compressionRatio
+        - fileName
+        - mimeType
+      properties:
+        fileId:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        originalSize:
+          type: integer
+          description: Original file size in bytes
+        compressedSize:
+          type: integer
+          description: Compressed file size in bytes
+        compressionRatio:
+          type: number
+          description: Percentage of size reduction (0-100)
+
+    PlatformStats:
+      type: object
+      required:
+        - pdfsGenerated
+        - filesCompressed
+        - totalBytesCompressed
+        - avgCompressionRatio
+      properties:
+        pdfsGenerated:
+          type: integer
+          description: Total number of PDFs generated
+        filesCompressed:
+          type: integer
+          description: Total number of files compressed
+        totalBytesCompressed:
+          type: integer
+          description: Total bytes saved through compression
+        avgCompressionRatio:
+          type: number
+          description: Average compression ratio percentage
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
