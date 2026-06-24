@@ -11,7 +11,6 @@ import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
 import AdminAnalytics from "@/pages/admin/analytics";
 import { AdminLayout } from "@/components/layout/AdminLayout";
-import { Layout } from "@/components/layout/Layout";
 
 const queryClient = new QueryClient();
 
@@ -38,19 +37,11 @@ function Router() {
       </Route>
 
       {/* Public Routes */}
-      <Route path="/">
-        <Layout><Home /></Layout>
-      </Route>
-      <Route path="/compress">
-        <Layout><Compress /></Layout>
-      </Route>
-      <Route path="/about">
-        <Layout><About /></Layout>
-      </Route>
+      <Route path="/" component={Home} />
+      <Route path="/compress" component={Compress} />
+      <Route path="/about" component={About} />
 
-      <Route>
-        <Layout><NotFound /></Layout>
-      </Route>
+      <Route component={NotFound} />
     </Switch>
   );
 }
