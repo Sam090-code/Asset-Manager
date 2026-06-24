@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { FileUp, FileText, Info } from "lucide-react";
+import { FileUp, FileText, Info, ShieldCheck } from "lucide-react";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -38,6 +38,19 @@ export function Navbar() {
             );
           })}
         </nav>
+        <div className="ml-auto">
+          <Link
+            href="/admin"
+            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              location.startsWith("/admin")
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            <span className="hidden md:inline-block">Admin</span>
+          </Link>
+        </div>
       </div>
     </header>
   );
