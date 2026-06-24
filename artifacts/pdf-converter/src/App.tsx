@@ -6,16 +6,51 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Compress from "@/pages/compress";
 import About from "@/pages/about";
+import AdminLogin from "@/pages/admin/login";
+import AdminDashboard from "@/pages/admin/dashboard";
+import AdminUsers from "@/pages/admin/users";
+import AdminAnalytics from "@/pages/admin/analytics";
+import { AdminLayout } from "@/components/layout/AdminLayout";
+import { Layout } from "@/components/layout/Layout";
 
 const queryClient = new QueryClient();
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/compress" component={Compress} />
-      <Route path="/about" component={About} />
-      <Route component={NotFound} />
+      {/* Admin Routes */}
+      <Route path="/admin" component={AdminLogin} />
+      
+      <Route path="/admin/dashboard">
+        <AdminLayout>
+          <AdminDashboard />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/users">
+        <AdminLayout>
+          <AdminUsers />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/analytics">
+        <AdminLayout>
+          <AdminAnalytics />
+        </AdminLayout>
+      </Route>
+
+      {/* Public Routes */}
+      <Route path="/">
+        <Layout><Home /></Layout>
+      </Route>
+      <Route path="/compress">
+        <Layout><Compress /></Layout>
+      </Route>
+      <Route path="/about">
+        <Layout><About /></Layout>
+      </Route>
+
+      <Route>
+        <Layout><NotFound /></Layout>
+      </Route>
     </Switch>
   );
 }

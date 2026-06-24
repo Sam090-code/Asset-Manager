@@ -9,9 +9,6 @@ export interface HealthStatus {
   status: string;
 }
 
-/**
- * Compression level
- */
 export type CompressInputLevel = typeof CompressInputLevel[keyof typeof CompressInputLevel];
 
 
@@ -22,7 +19,6 @@ export const CompressInputLevel = {
 } as const;
 
 export interface CompressInput {
-  /** Compression level */
   level: CompressInputLevel;
 }
 
@@ -30,26 +26,144 @@ export interface CompressResult {
   fileId: string;
   fileName: string;
   mimeType: string;
-  /** Original file size in bytes */
   originalSize: number;
-  /** Compressed file size in bytes */
   compressedSize: number;
-  /** Percentage of size reduction (0-100) */
   compressionRatio: number;
 }
 
 export interface PlatformStats {
-  /** Total number of PDFs generated */
   pdfsGenerated: number;
-  /** Total number of files compressed */
   filesCompressed: number;
-  /** Total bytes saved through compression */
   totalBytesCompressed: number;
-  /** Average compression ratio percentage */
   avgCompressionRatio: number;
+}
+
+export interface AdminAuthInput {
+  password: string;
+}
+
+export interface AdminAuthResult {
+  token: string;
+}
+
+export type AdminUserStatus = typeof AdminUserStatus[keyof typeof AdminUserStatus];
+
+
+export const AdminUserStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export type AdminUserRole = typeof AdminUserRole[keyof typeof AdminUserRole];
+
+
+export const AdminUserRole = {
+  user: 'user',
+  admin: 'admin',
+} as const;
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  status: AdminUserStatus;
+  role: AdminUserRole;
+  pdfsGenerated: number;
+  filesCompressed: number;
+  createdAt: string;
+  lastActiveAt: string;
+}
+
+export type AdminCreateUserInputRole = typeof AdminCreateUserInputRole[keyof typeof AdminCreateUserInputRole];
+
+
+export const AdminCreateUserInputRole = {
+  user: 'user',
+  admin: 'admin',
+} as const;
+
+export interface AdminCreateUserInput {
+  name: string;
+  email: string;
+  role?: AdminCreateUserInputRole;
+}
+
+export type AdminUpdateUserInputStatus = typeof AdminUpdateUserInputStatus[keyof typeof AdminUpdateUserInputStatus];
+
+
+export const AdminUpdateUserInputStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export type AdminUpdateUserInputRole = typeof AdminUpdateUserInputRole[keyof typeof AdminUpdateUserInputRole];
+
+
+export const AdminUpdateUserInputRole = {
+  user: 'user',
+  admin: 'admin',
+} as const;
+
+export interface AdminUpdateUserInput {
+  status?: AdminUpdateUserInputStatus;
+  role?: AdminUpdateUserInputRole;
+  name?: string;
+}
+
+export interface ActivityItem {
+  id: number;
+  type: string;
+  fileName: string;
+  originalSize: number;
+  compressedSize: number;
+  compressionRatio: number;
+  level: string;
+  createdAt: string;
+}
+
+export interface AdminDashboard {
+  totalUsers: number;
+  activeUsers: number;
+  suspendedUsers: number;
+  totalPdfsGenerated: number;
+  totalFilesCompressed: number;
+  totalBytesCompressed: number;
+  avgCompressionRatio: number;
+  storageUsedBytes: number;
+  activeJobsCount: number;
+  recentActivity: ActivityItem[];
+}
+
+export interface ReportDataPoint {
+  label: string;
+  pdfsGenerated: number;
+  filesCompressed: number;
+  bytesSaved: number;
+}
+
+export interface AdminReports {
+  period: string;
+  data: ReportDataPoint[];
+}
+
+export interface SuccessResponse {
+  success: boolean;
 }
 
 export interface ErrorResponse {
   error: string;
 }
+
+export type AdminGetReportsParams = {
+period?: AdminGetReportsPeriod;
+};
+
+export type AdminGetReportsPeriod = typeof AdminGetReportsPeriod[keyof typeof AdminGetReportsPeriod];
+
+
+export const AdminGetReportsPeriod = {
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
 

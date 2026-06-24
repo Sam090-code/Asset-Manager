@@ -6,9 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Compression level
- */
 export type CompressInputLevel = typeof CompressInputLevel[keyof typeof CompressInputLevel];
 
 

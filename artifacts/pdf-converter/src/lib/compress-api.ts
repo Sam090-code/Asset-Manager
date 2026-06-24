@@ -1,4 +1,4 @@
-import type { CompressResult } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { CompressResult } from "@workspace/api-client-react";
 
 export async function compressFileApi(file: File, level: 'low' | 'balanced' | 'maximum'): Promise<{ result: CompressResult; blob: Blob }> {
   const form = new FormData();

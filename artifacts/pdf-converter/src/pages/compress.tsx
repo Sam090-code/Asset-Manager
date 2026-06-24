@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { UploadCloud, FileArchive, CheckCircle2, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { CompressResult } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { CompressResult } from "@workspace/api-client-react";
 
 function formatBytes(bytes: number, decimals = 2) {
   if (!+bytes) return '0 Bytes';

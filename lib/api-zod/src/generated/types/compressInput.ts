@@ -8,6 +8,5 @@
 import type { CompressInputLevel } from './compressInputLevel';
 
 export interface CompressInput {
-  /** Compression level */
   level: CompressInputLevel;
 }

@@ -14,13 +14,14 @@ tags:
     description: File compression operations
   - name: stats
     description: Usage statistics
+  - name: admin
+    description: Admin dashboard operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -34,7 +35,6 @@ paths:
       operationId: compressFile
       tags: [compress]
       summary: Compress a file
-      description: Uploads and compresses an image or PDF file
       requestBody:
         required: true
         content:
@@ -94,7 +94,194 @@ paths:
               schema:
                 $ref: "#/components/schemas/PlatformStats"
 
+  /admin/auth:
+    post:
+      operationId: adminAuth
+      tags: [admin]
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminAuthInput"
+      responses:
+        "200":
+          description: Auth token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthResult"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/dashboard:
+    get:
+      operationId: adminGetDashboard
+      tags: [admin]
+      summary: Get admin dashboard overview
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDashboard"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: List all users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: adminCreateUser
+      tags: [admin]
+      summary: Create a user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateUserInput"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}:
+    patch:
+      operationId: adminUpdateUser
+      tags: [admin]
+      summary: Update a user (e.g. suspend)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateUserInput"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: adminDeleteUser
+      tags: [admin]
+      summary: Delete a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/reports:
+    get:
+      operationId: adminGetReports
+      tags: [admin]
+      summary: Get activity reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+            default: daily
+      responses:
+        "200":
+          description: Report data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminReports"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -112,7 +299,6 @@ components:
         level:
           type: string
           enum: [low, balanced, maximum]
-          description: Compression level
 
     CompressResult:
       type: object
@@ -132,13 +318,10 @@ components:
           type: string
         originalSize:
           type: integer
-          description: Original file size in bytes
         compressedSize:
           type: integer
-          description: Compressed file size in bytes
         compressionRatio:
           type: number
-          description: Percentage of size reduction (0-100)
 
     PlatformStats:
       type: object
@@ -150,16 +333,196 @@ components:
       properties:
         pdfsGenerated:
           type: integer
-          description: Total number of PDFs generated
         filesCompressed:
           type: integer
-          description: Total number of files compressed
         totalBytesCompressed:
           type: integer
-          description: Total bytes saved through compression
         avgCompressionRatio:
           type: number
-          description: Average compression ratio percentage
+
+    AdminAuthInput:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+
+    AdminAuthResult:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+
+    AdminUser:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - status
+        - role
+        - pdfsGenerated
+        - filesCompressed
+        - createdAt
+        - lastActiveAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended]
+        role:
+          type: string
+          enum: [user, admin]
+        pdfsGenerated:
+          type: integer
+        filesCompressed:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        lastActiveAt:
+          type: string
+          format: date-time
+
+    AdminCreateUserInput:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+          default: user
+
+    AdminUpdateUserInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, suspended]
+        role:
+          type: string
+          enum: [user, admin]
+        name:
+          type: string
+
+    AdminDashboard:
+      type: object
+      required:
+        - totalUsers
+        - activeUsers
+        - suspendedUsers
+        - totalPdfsGenerated
+        - totalFilesCompressed
+        - totalBytesCompressed
+        - avgCompressionRatio
+        - storageUsedBytes
+        - activeJobsCount
+        - recentActivity
+      properties:
+        totalUsers:
+          type: integer
+        activeUsers:
+          type: integer
+        suspendedUsers:
+          type: integer
+        totalPdfsGenerated:
+          type: integer
+        totalFilesCompressed:
+          type: integer
+        totalBytesCompressed:
+          type: integer
+        avgCompressionRatio:
+          type: number
+        storageUsedBytes:
+          type: integer
+        activeJobsCount:
+          type: integer
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+
+    ActivityItem:
+      type: object
+      required:
+        - id
+        - type
+        - fileName
+        - originalSize
+        - compressedSize
+        - compressionRatio
+        - level
+        - createdAt
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        fileName:
+          type: string
+        originalSize:
+          type: integer
+        compressedSize:
+          type: integer
+        compressionRatio:
+          type: integer
+        level:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminReports:
+      type: object
+      required:
+        - period
+        - data
+      properties:
+        period:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportDataPoint"
+
+    ReportDataPoint:
+      type: object
+      required:
+        - label
+        - pdfsGenerated
+        - filesCompressed
+        - bytesSaved
+      properties:
+        label:
+          type: string
+        pdfsGenerated:
+          type: integer
+        filesCompressed:
+          type: integer
+        bytesSaved:
+          type: integer
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
 
     ErrorResponse:
       type: object

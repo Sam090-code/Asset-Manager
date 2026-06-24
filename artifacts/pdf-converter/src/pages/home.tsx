@@ -120,7 +120,7 @@ export default function Home() {
     setIsGenerating(true);
     try {
       const pdfBytes = await imagesToPdf(images, { pageSize, orientation, margin });
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const blob = new Blob([pdfBytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

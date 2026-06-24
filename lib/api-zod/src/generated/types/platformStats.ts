@@ -7,12 +7,8 @@
  */
 
 export interface PlatformStats {
-  /** Total number of PDFs generated */
   pdfsGenerated: number;
-  /** Total number of files compressed */
   filesCompressed: number;
-  /** Total bytes saved through compression */
   totalBytesCompressed: number;
-  /** Average compression ratio percentage */
   avgCompressionRatio: number;
 }

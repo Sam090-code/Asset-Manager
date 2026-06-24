@@ -9,7 +9,6 @@ import * as zod from 'zod';
 
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -18,20 +17,19 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Uploads and compresses an image or PDF file
  * @summary Compress a file
  */
 export const CompressFileBody = zod.object({
-  "level": zod.enum(['low', 'balanced', 'maximum']).describe('Compression level')
+  "level": zod.enum(['low', 'balanced', 'maximum'])
 })
 
 export const CompressFileResponse = zod.object({
   "fileId": zod.string(),
   "fileName": zod.string(),
   "mimeType": zod.string(),
-  "originalSize": zod.number().describe('Original file size in bytes'),
-  "compressedSize": zod.number().describe('Compressed file size in bytes'),
-  "compressionRatio": zod.number().describe('Percentage of size reduction (0-100)')
+  "originalSize": zod.number(),
+  "compressedSize": zod.number(),
+  "compressionRatio": zod.number()
 })
 
 
@@ -47,10 +45,135 @@ export const DownloadFileParams = zod.object({
  * @summary Get platform usage statistics
  */
 export const GetStatsResponse = zod.object({
-  "pdfsGenerated": zod.number().describe('Total number of PDFs generated'),
-  "filesCompressed": zod.number().describe('Total number of files compressed'),
-  "totalBytesCompressed": zod.number().describe('Total bytes saved through compression'),
-  "avgCompressionRatio": zod.number().describe('Average compression ratio percentage')
+  "pdfsGenerated": zod.number(),
+  "filesCompressed": zod.number(),
+  "totalBytesCompressed": zod.number(),
+  "avgCompressionRatio": zod.number()
+})
+
+
+/**
+ * @summary Admin login
+ */
+export const AdminAuthBody = zod.object({
+  "password": zod.string()
+})
+
+export const AdminAuthResponse = zod.object({
+  "token": zod.string()
+})
+
+
+/**
+ * @summary Get admin dashboard overview
+ */
+export const AdminGetDashboardResponse = zod.object({
+  "totalUsers": zod.number(),
+  "activeUsers": zod.number(),
+  "suspendedUsers": zod.number(),
+  "totalPdfsGenerated": zod.number(),
+  "totalFilesCompressed": zod.number(),
+  "totalBytesCompressed": zod.number(),
+  "avgCompressionRatio": zod.number(),
+  "storageUsedBytes": zod.number(),
+  "activeJobsCount": zod.number(),
+  "recentActivity": zod.array(zod.object({
+  "id": zod.number(),
+  "type": zod.string(),
+  "fileName": zod.string(),
+  "originalSize": zod.number(),
+  "compressedSize": zod.number(),
+  "compressionRatio": zod.number(),
+  "level": zod.string(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary List all users
+ */
+export const AdminListUsersResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "status": zod.enum(['active', 'suspended']),
+  "role": zod.enum(['user', 'admin']),
+  "pdfsGenerated": zod.number(),
+  "filesCompressed": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "lastActiveAt": zod.coerce.date()
+})
+export const AdminListUsersResponse = zod.array(AdminListUsersResponseItem)
+
+
+/**
+ * @summary Create a user
+ */
+export const adminCreateUserBodyRoleDefault = `user`;
+
+export const AdminCreateUserBody = zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['user', 'admin']).default(adminCreateUserBodyRoleDefault)
+})
+
+
+/**
+ * @summary Update a user (e.g. suspend)
+ */
+export const AdminUpdateUserParams = zod.object({
+  "userId": zod.coerce.number()
+})
+
+export const AdminUpdateUserBody = zod.object({
+  "status": zod.enum(['active', 'suspended']).optional(),
+  "role": zod.enum(['user', 'admin']).optional(),
+  "name": zod.string().optional()
+})
+
+export const AdminUpdateUserResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "status": zod.enum(['active', 'suspended']),
+  "role": zod.enum(['user', 'admin']),
+  "pdfsGenerated": zod.number(),
+  "filesCompressed": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "lastActiveAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a user
+ */
+export const AdminDeleteUserParams = zod.object({
+  "userId": zod.coerce.number()
+})
+
+export const AdminDeleteUserResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
+ * @summary Get activity reports
+ */
+export const adminGetReportsQueryPeriodDefault = `daily`;
+
+export const AdminGetReportsQueryParams = zod.object({
+  "period": zod.enum(['daily', 'weekly', 'monthly']).default(adminGetReportsQueryPeriodDefault)
+})
+
+export const AdminGetReportsResponse = zod.object({
+  "period": zod.string(),
+  "data": zod.array(zod.object({
+  "label": zod.string(),
+  "pdfsGenerated": zod.number(),
+  "filesCompressed": zod.number(),
+  "bytesSaved": zod.number()
+}))
 })
 
 

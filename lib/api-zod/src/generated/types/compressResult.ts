@@ -10,10 +10,7 @@ export interface CompressResult {
   fileId: string;
   fileName: string;
   mimeType: string;
-  /** Original file size in bytes */
   originalSize: number;
-  /** Compressed file size in bytes */
   compressedSize: number;
-  /** Percentage of size reduction (0-100) */
   compressionRatio: number;
 }

@@ -6,9 +6,26 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './activityItem';
+export * from './adminAuthInput';
+export * from './adminAuthResult';
+export * from './adminCreateUserInput';
+export * from './adminCreateUserInputRole';
+export * from './adminDashboard';
+export * from './adminGetReportsParams';
+export * from './adminGetReportsPeriod';
+export * from './adminReports';
+export * from './adminUpdateUserInput';
+export * from './adminUpdateUserInputRole';
+export * from './adminUpdateUserInputStatus';
+export * from './adminUser';
+export * from './adminUserRole';
+export * from './adminUserStatus';
 export * from './compressInput';
 export * from './compressInputLevel';
 export * from './compressResult';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './platformStats';
+export * from './reportDataPoint';
+export * from './successResponse';
