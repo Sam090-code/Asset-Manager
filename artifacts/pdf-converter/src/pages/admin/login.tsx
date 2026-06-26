@@ -65,9 +65,6 @@ export default function AdminLogin() {
               {authMutation.isPending ? "Authenticating..." : "Sign In"}
             </Button>
           </form>
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Default dev password: <code className="bg-muted px-1.5 py-0.5 rounded text-foreground">admin123</code>
-          </div>
         </CardContent>
       </Card>
     </div>
