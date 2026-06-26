@@ -32,10 +32,10 @@ const upload = multer({
   },
 });
 
-const QUALITY_MAP: Record<string, { jpeg: number; webp: number; pdfGhostQuality: string }> = {
-  low:      { jpeg: 85, webp: 85, pdfGhostQuality: "printer" },
-  balanced: { jpeg: 70, webp: 70, pdfGhostQuality: "ebook" },
-  maximum:  { jpeg: 45, webp: 45, pdfGhostQuality: "screen" },
+const QUALITY_MAP: Record<string, { jpeg: number; webp: number; pdfGhostQuality: string; pdfDpi: number }> = {
+  low:      { jpeg: 85, webp: 85, pdfGhostQuality: "printer", pdfDpi: 200 },
+  balanced: { jpeg: 70, webp: 70, pdfGhostQuality: "ebook",   pdfDpi: 120 },
+  maximum:  { jpeg: 45, webp: 45, pdfGhostQuality: "screen",  pdfDpi: 72  },
 };
 
 async function compressImage(buffer: Buffer, mimetype: string, level: string): Promise<Buffer> {
@@ -71,15 +71,46 @@ async function compressImage(buffer: Buffer, mimetype: string, level: string): P
 
 async function compressPdf(buffer: Buffer, level: string): Promise<Buffer> {
   const quality = QUALITY_MAP[level] ?? QUALITY_MAP.balanced;
+  const dpi = quality.pdfDpi;
   const tmpDir = os.tmpdir();
   const inputPath = path.join(tmpDir, `input-${uuidv4()}.pdf`);
   const outputPath = path.join(tmpDir, `output-${uuidv4()}.pdf`);
 
   fs.writeFileSync(inputPath, buffer);
   try {
+    // Force re-encoding: lower threshold so even low-DPI source images get recompressed.
+    // Ghostscript only downsamples when src_dpi > target_dpi × DownsampleThreshold (default 1.5).
+    // Setting threshold=0.9 means any image at or above 0.9×target_dpi gets resampled.
     execSync(
-      `gs -dBATCH -dNOPAUSE -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/${quality.pdfGhostQuality} -sOutputFile="${outputPath}" "${inputPath}"`,
-      { timeout: 30000, stdio: "pipe" },
+      [
+        "gs",
+        "-dBATCH", "-dNOPAUSE", "-dQUIET",
+        "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.4",
+        `-dPDFSETTINGS=/${quality.pdfGhostQuality}`,
+        // Force color image downsampling
+        "-dDownsampleColorImages=true",
+        `-dColorImageResolution=${dpi}`,
+        "-dColorImageDownsampleType=/Bicubic",
+        "-dColorImageDownsampleThreshold=0.9",
+        // Force re-encode color images as JPEG
+        "-dAutoFilterColorImages=false",
+        "-dColorImageFilter=/DCTEncode",
+        // Force gray image downsampling
+        "-dDownsampleGrayImages=true",
+        `-dGrayImageResolution=${dpi}`,
+        "-dGrayImageDownsampleType=/Bicubic",
+        "-dGrayImageDownsampleThreshold=0.9",
+        "-dAutoFilterGrayImages=false",
+        "-dGrayImageFilter=/DCTEncode",
+        // Mono images
+        "-dDownsampleMonoImages=true",
+        `-dMonoImageResolution=${dpi}`,
+        `-sOutputFile="${outputPath}"`,
+        `"${inputPath}"`,
+      ].join(" "),
+      // Allow up to 3 minutes for large PDFs
+      { timeout: 180000, stdio: "pipe" },
     );
     if (!fs.existsSync(outputPath)) return buffer;
     const result = fs.readFileSync(outputPath);
