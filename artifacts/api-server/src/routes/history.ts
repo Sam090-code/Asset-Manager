@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { conversionHistoryTable } from "@workspace/db";
+import { conversionHistoryTable, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -46,6 +46,21 @@ router.post("/history", requireAuth, async (req: any, res) => {
       mimeType: mimeType ?? null,
       level: level ?? null,
     });
+
+    // Bump per-user counters (best-effort — matched by clerkUserId stored in email column isn't reliable,
+    // so we update the user whose email was used to sync; find by clerkUserId stored in name fallback.
+    // We look up the user by their email passed in the request body, if provided.
+    if (req.body.userEmail) {
+      const countUpdate =
+        type === "pdf"
+          ? { pdfsGenerated: sql`${usersTable.pdfsGenerated} + 1`, lastActiveAt: new Date() }
+          : { filesCompressed: sql`${usersTable.filesCompressed} + 1`, lastActiveAt: new Date() };
+      await db
+        .update(usersTable)
+        .set(countUpdate)
+        .where(eq(usersTable.email, req.body.userEmail))
+        .catch(() => {});
+    }
 
     res.json({ ok: true });
   } catch (err) {

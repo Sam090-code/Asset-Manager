@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, Show, useClerk, useUser } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
@@ -114,6 +114,32 @@ function SignUpPage() {
   );
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function UserSyncer() {
+  const { user, isLoaded } = useUser();
+  const syncedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    const email = user.primaryEmailAddress?.emailAddress;
+    if (!email || syncedRef.current === email) return;
+    syncedRef.current = email;
+
+    fetch(`${BASE}/api/users/sync`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: user.fullName || user.firstName || email.split("@")[0],
+        email,
+      }),
+    }).catch(() => {});
+  }, [isLoaded, user]);
+
+  return null;
+}
+
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
   const qc = useQueryClient();
@@ -190,6 +216,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <UserSyncer />
         <TooltipProvider>
           <Router />
           <Toaster />

@@ -67,7 +67,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function Compress() {
   const [file, setFile] = useState<File | null>(null);
-  const { isSignedIn } = useUser();
+  const { isSignedIn, user } = useUser();
   const [level, setLevel] = useState<"low" | "balanced" | "maximum">("balanced");
   const [isCompressing, setIsCompressing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -136,6 +136,7 @@ export default function Compress() {
             compressionRatio: data.result.compressionRatio,
             mimeType: file.type,
             level,
+            userEmail: user?.primaryEmailAddress?.emailAddress,
           }),
         }).catch(() => {});
       }

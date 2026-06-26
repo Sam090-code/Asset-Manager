@@ -208,7 +208,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isSignedIn } = useUser();
+  const { isSignedIn, user } = useUser();
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -285,7 +285,12 @@ export default function Home() {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "pdf", fileName, pageCount: images.length }),
+          body: JSON.stringify({
+            type: "pdf",
+            fileName,
+            pageCount: images.length,
+            userEmail: user?.primaryEmailAddress?.emailAddress,
+          }),
         }).catch(() => {});
       }
     } catch (err) {
