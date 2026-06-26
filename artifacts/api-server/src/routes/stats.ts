@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { platformStatsTable } from "@workspace/db";
 import { GetStatsResponse } from "@workspace/api-zod";
@@ -32,6 +33,28 @@ router.get("/stats", async (_req, res) => {
 
   const response = GetStatsResponse.parse(stats);
   res.json(response);
+});
+
+router.post("/stats/record-pdf", async (_req, res) => {
+  try {
+    const existing = await db.select().from(platformStatsTable).limit(1);
+    if (existing.length === 0) {
+      await db.insert(platformStatsTable).values({
+        pdfsGenerated: 1,
+        filesCompressed: 0,
+        totalBytesCompressed: 0,
+      });
+    } else {
+      await db
+        .update(platformStatsTable)
+        .set({ pdfsGenerated: existing[0].pdfsGenerated + 1 })
+        .where(eq(platformStatsTable.id, existing[0].id));
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("record-pdf error:", err);
+    res.status(500).json({ error: "Failed to record PDF stat" });
+  }
 });
 
 export default router;

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { imagesToPdf } from "@/lib/pdf-generator";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -130,6 +132,10 @@ export default function Home() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
+      fetch(`${import.meta.env.BASE_URL}api/stats/record-pdf`, { method: "POST" })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["/stats"] }))
+        .catch(() => {});
+
       toast({
         title: "Success",
         description: "PDF generated and downloaded successfully.",
