@@ -18,7 +18,7 @@ export function Navbar() {
   const { user } = useUser();
 
   const navItems = [
-    { href: "/", label: "Image to PDF", icon: FileText },
+    { href: "/convert", label: "Image to PDF", icon: FileText },
     { href: "/compress", label: "Compressor", icon: FileUp },
     { href: "/about", label: "About", icon: Info },
   ];

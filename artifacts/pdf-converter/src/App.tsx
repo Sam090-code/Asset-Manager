@@ -7,6 +7,7 @@ import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Compress from "@/pages/compress";
 import About from "@/pages/about";
@@ -149,7 +150,8 @@ function Router() {
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
 
-      <Route path="/" component={Home} />
+      <Route path="/" component={Landing} />
+      <Route path="/convert" component={Home} />
       <Route path="/compress" component={Compress} />
       <Route path="/about" component={About} />
       <Route path="/history" component={HistoryPage} />
