@@ -32,30 +32,41 @@ const upload = multer({
   },
 });
 
-const QUALITY_MAP: Record<string, { jpeg: number; png: number; pdfGhostQuality: string }> = {
-  low:      { jpeg: 90, png: 9, pdfGhostQuality: "printer" },
-  balanced: { jpeg: 72, png: 6, pdfGhostQuality: "ebook" },
-  maximum:  { jpeg: 40, png: 3, pdfGhostQuality: "screen" },
+const QUALITY_MAP: Record<string, { jpeg: number; webp: number; pdfGhostQuality: string }> = {
+  low:      { jpeg: 85, webp: 85, pdfGhostQuality: "printer" },
+  balanced: { jpeg: 70, webp: 70, pdfGhostQuality: "ebook" },
+  maximum:  { jpeg: 45, webp: 45, pdfGhostQuality: "screen" },
 };
 
 async function compressImage(buffer: Buffer, mimetype: string, level: string): Promise<Buffer> {
   const quality = QUALITY_MAP[level] ?? QUALITY_MAP.balanced;
 
-  if (mimetype === "image/webp") {
-    return sharp(buffer)
+  let compressed: Buffer;
+
+  if (mimetype === "image/png") {
+    // For PNG, try WebP (best compression with transparency), fall back to max-zlib PNG
+    compressed = await sharp(buffer)
+      .webp({ quality: quality.webp, effort: 6 })
+      .toBuffer();
+    // If WebP is somehow larger, try max-zlib PNG as fallback
+    if (compressed.length >= buffer.length) {
+      compressed = await sharp(buffer)
+        .png({ compressionLevel: 9, effort: 10 })
+        .toBuffer();
+    }
+  } else if (mimetype === "image/webp") {
+    compressed = await sharp(buffer)
+      .webp({ quality: quality.webp, effort: 6 })
+      .toBuffer();
+  } else {
+    // JPEG and others
+    compressed = await sharp(buffer)
       .jpeg({ quality: quality.jpeg, mozjpeg: true })
       .toBuffer();
   }
 
-  if (mimetype === "image/png") {
-    return sharp(buffer)
-      .png({ compressionLevel: quality.png, effort: 10 })
-      .toBuffer();
-  }
-
-  return sharp(buffer)
-    .jpeg({ quality: quality.jpeg, mozjpeg: true })
-    .toBuffer();
+  // Never return a file larger than the original
+  return compressed.length < buffer.length ? compressed : buffer;
 }
 
 async function compressPdf(buffer: Buffer, level: string): Promise<Buffer> {
@@ -82,7 +93,8 @@ async function compressPdf(buffer: Buffer, level: string): Promise<Buffer> {
 }
 
 function outputMimeType(inputMime: string): string {
-  if (inputMime === "image/webp") return "image/jpeg";
+  if (inputMime === "image/png") return "image/webp";
+  if (inputMime === "image/webp") return "image/webp";
   return inputMime;
 }
 
@@ -90,8 +102,8 @@ function outputExtension(inputMime: string): string {
   const map: Record<string, string> = {
     "image/jpeg": ".jpg",
     "image/jpg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".jpg",
+    "image/png": ".webp",
+    "image/webp": ".webp",
     "application/pdf": ".pdf",
   };
   return map[inputMime] ?? ".bin";
