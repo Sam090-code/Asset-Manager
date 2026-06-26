@@ -28,6 +28,20 @@ export const compressionJobsTable = pgTable("compression_jobs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const conversionHistoryTable = pgTable("conversion_history", {
+  id: serial("id").primaryKey(),
+  clerkUserId: text("clerk_user_id").notNull(),
+  type: text("type").notNull(), // 'pdf' | 'compression'
+  fileName: text("file_name").notNull(),
+  originalSize: integer("original_size"),
+  compressedSize: integer("compressed_size"),
+  compressionRatio: integer("compression_ratio"),
+  pageCount: integer("page_count"),
+  mimeType: text("mime_type"),
+  level: text("level"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),

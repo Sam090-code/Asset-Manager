@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useUser } from "@clerk/react";
 import { Layout } from "@/components/layout/Layout";
 import { compressFileApi } from "@/lib/compress-api";
 import { Button } from "@/components/ui/button";
@@ -62,8 +63,11 @@ function useElapsedTimer(running: boolean) {
   return elapsed;
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export default function Compress() {
   const [file, setFile] = useState<File | null>(null);
+  const { isSignedIn } = useUser();
   const [level, setLevel] = useState<"low" | "balanced" | "maximum">("balanced");
   const [isCompressing, setIsCompressing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -118,6 +122,23 @@ export default function Compress() {
         setDone(false);
       }, 600);
       toast({ title: "Success", description: "File compressed successfully." });
+
+      if (isSignedIn) {
+        fetch(`${BASE}/api/history`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "compression",
+            fileName: data.result.fileName,
+            originalSize: data.result.originalSize,
+            compressedSize: data.result.compressedSize,
+            compressionRatio: data.result.compressionRatio,
+            mimeType: file.type,
+            level,
+          }),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
       stopProgress();

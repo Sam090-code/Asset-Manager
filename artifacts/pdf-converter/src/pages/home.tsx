@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUser } from "@clerk/react";
 import { Layout } from "@/components/layout/Layout";
 import { imagesToPdf } from "@/lib/pdf-generator";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,8 @@ function SortableImage({
   );
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export default function Home() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [pageSize, setPageSize] = useState<'A4' | 'Letter' | 'Legal'>('A4');
@@ -90,6 +93,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isSignedIn } = useUser();
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -149,6 +153,19 @@ export default function Home() {
       fetch(`${import.meta.env.BASE_URL}api/stats/record-pdf`, { method: "POST" })
         .then(() => queryClient.invalidateQueries({ queryKey: ["/stats"] }))
         .catch(() => {});
+
+      if (isSignedIn) {
+        fetch(`${BASE}/api/history`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "pdf",
+            fileName: `DocuFlow_${new Date().getTime()}.pdf`,
+            pageCount: images.length,
+          }),
+        }).catch(() => {});
+      }
 
       toast({
         title: "Success",

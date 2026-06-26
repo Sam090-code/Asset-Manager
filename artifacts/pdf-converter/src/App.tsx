@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Compress from "@/pages/compress";
 import About from "@/pages/about";
+import HistoryPage from "@/pages/history";
 import AdminLogin from "@/pages/admin/login";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
@@ -151,6 +152,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/compress" component={Compress} />
       <Route path="/about" component={About} />
+      <Route path="/history" component={HistoryPage} />
 
       <Route component={NotFound} />
     </Switch>

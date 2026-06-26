@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { FileUp, FileText, Info, ShieldCheck, LogIn, LogOut, User } from "lucide-react";
+import { FileUp, FileText, Info, ShieldCheck, LogIn, LogOut, User, History } from "lucide-react";
 import { useClerk, useUser, Show } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,8 @@ export function Navbar() {
     { href: "/compress", label: "Compressor", icon: FileUp },
     { href: "/about", label: "About", icon: Info },
   ];
+
+  const isSignedIn = !!user;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -52,6 +54,20 @@ export function Navbar() {
             );
           })}
         </nav>
+
+        <Show when="signed-in">
+          <Link
+            href="/history"
+            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ml-2 ${
+              location === "/history"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <History className="h-4 w-4" />
+            <span className="hidden md:inline-block">History</span>
+          </Link>
+        </Show>
 
         <div className="ml-auto flex items-center gap-2">
           <Show when="signed-out">
