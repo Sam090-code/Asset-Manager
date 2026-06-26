@@ -20,48 +20,62 @@ type ImageItem = {
 };
 
 function SortableImage({ 
-  item, 
+  item,
+  index,
   onRemove, 
   onRotate 
 }: { 
-  item: ImageItem; 
+  item: ImageItem;
+  index: number;
   onRemove: (id: string) => void;
   onRotate: (id: string, direction: 'left' | 'right') => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="relative group bg-card border rounded-lg overflow-hidden shadow-sm aspect-square flex items-center justify-center">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative group bg-card border rounded-lg overflow-hidden shadow-sm aspect-square flex items-center justify-center ${isDragging ? "ring-2 ring-primary shadow-lg" : ""}`}
+    >
       <div 
         {...attributes} 
         {...listeners}
-        className="absolute top-2 left-2 z-10 p-1.5 bg-background/80 backdrop-blur rounded text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+        className="absolute top-2 left-2 z-10 p-1.5 bg-background/90 backdrop-blur rounded-md text-muted-foreground hover:text-foreground hover:bg-background cursor-grab active:cursor-grabbing shadow-sm transition-colors"
+        title="Drag to reorder"
       >
         <GripVertical className="h-4 w-4" />
       </div>
+
+      <div className="absolute bottom-2 left-2 z-10 px-2 py-0.5 bg-primary text-primary-foreground text-xs font-bold rounded-md shadow-sm select-none">
+        {index + 1}
+      </div>
       
       <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="secondary" size="icon" className="h-8 w-8 bg-background/80 backdrop-blur" onClick={() => onRotate(item.id, 'left')}>
-          <RotateCcw className="h-4 w-4" />
+        <Button variant="secondary" size="icon" className="h-7 w-7 bg-background/90 backdrop-blur shadow-sm" onClick={() => onRotate(item.id, 'left')}>
+          <RotateCcw className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="secondary" size="icon" className="h-8 w-8 bg-background/80 backdrop-blur" onClick={() => onRotate(item.id, 'right')}>
-          <RotateCw className="h-4 w-4" />
+        <Button variant="secondary" size="icon" className="h-7 w-7 bg-background/90 backdrop-blur shadow-sm" onClick={() => onRotate(item.id, 'right')}>
+          <RotateCw className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="destructive" size="icon" className="h-8 w-8 backdrop-blur" onClick={() => onRemove(item.id)}>
-          <Trash2 className="h-4 w-4" />
+        <Button variant="destructive" size="icon" className="h-7 w-7 shadow-sm" onClick={() => onRemove(item.id)}>
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
       <img 
         src={item.dataUrl} 
-        alt="Upload preview" 
+        alt={`Page ${index + 1}`}
         className="max-h-full max-w-full object-contain p-2"
         style={{ transform: `rotate(${item.rotation}deg)`, transition: 'transform 0.2s' }}
+        draggable={false}
       />
     </div>
   );
@@ -196,10 +210,11 @@ export default function Home() {
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={images.map(i => i.id)} strategy={rectSortingStrategy}>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {images.map(item => (
+                    {images.map((item, index) => (
                       <SortableImage 
-                        key={item.id} 
-                        item={item} 
+                        key={item.id}
+                        item={item}
+                        index={index}
                         onRemove={(id) => setImages(images.filter(i => i.id !== id))}
                         onRotate={(id, dir) => setImages(images.map(i => 
                           i.id === id ? { ...i, rotation: i.rotation + (dir === 'left' ? -90 : 90) } : i
@@ -209,6 +224,10 @@ export default function Home() {
                   </div>
                 </SortableContext>
               </DndContext>
+              <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+                <GripVertical className="h-3.5 w-3.5" />
+                Drag the handle on each image to reorder pages. Numbers show the final PDF page order.
+              </p>
             </div>
           )}
         </div>
