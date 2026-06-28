@@ -9,6 +9,7 @@ import {
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type Stage = "idle" | "uploading" | "compressing" | "done" | "error";
+type PollResult = { status: string; originalSize: number; compressedSize?: number; error?: string; alreadyOptimal?: boolean };
 
 function formatBytes(b: number | null | undefined) {
   if (!b) return "—";
@@ -39,6 +40,7 @@ export default function VideoCompressPage() {
   const [compressedSize, setCompressedSize] = useState<number | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [downloadName, setDownloadName] = useState("compressed.mp4");
+  const [alreadyOptimal, setAlreadyOptimal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [dots, setDots] = useState(".");
@@ -65,6 +67,7 @@ export default function VideoCompressPage() {
         if (data.status === "done") {
           clearInterval(pollRef.current!);
           setCompressedSize(data.compressedSize);
+          setAlreadyOptimal((data as PollResult).alreadyOptimal ?? false);
           setStage("done");
         } else if (data.status === "error") {
           clearInterval(pollRef.current!);
@@ -138,6 +141,7 @@ export default function VideoCompressPage() {
     setOriginalSize(null);
     setCompressedSize(null);
     setJobId(null);
+    setAlreadyOptimal(false);
     setError(null);
     setVideoDuration(null);
     setStage("idle");
@@ -313,8 +317,14 @@ export default function VideoCompressPage() {
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-semibold">Done! Your video is ready</p>
-                    <p className="text-sm text-muted-foreground">Compressed server-side with FFmpeg</p>
+                    <p className="font-semibold">
+                      {alreadyOptimal ? "Video is already optimised" : "Done! Your video is ready"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {alreadyOptimal
+                        ? "Re-encoding would increase the file size — original returned unchanged"
+                        : "Compressed server-side with FFmpeg"}
+                    </p>
                   </div>
                 </div>
 
@@ -324,13 +334,13 @@ export default function VideoCompressPage() {
                     <p className="font-bold text-sm">{formatBytes(originalSize)}</p>
                   </div>
                   <div className="bg-muted/40 rounded-xl p-3 text-center">
-                    <p className="text-xs text-muted-foreground mb-0.5">Compressed</p>
+                    <p className="text-xs text-muted-foreground mb-0.5">{alreadyOptimal ? "Output" : "Compressed"}</p>
                     <p className="font-bold text-sm">{formatBytes(compressedSize)}</p>
                   </div>
-                  <div className="bg-green-50 rounded-xl p-3 text-center">
-                    <p className="text-xs text-green-600 mb-0.5">Saved</p>
-                    <p className="font-bold text-sm text-green-700">
-                      {savedPct > 0 ? `-${savedPct}%` : "Similar size"}
+                  <div className={`rounded-xl p-3 text-center ${alreadyOptimal ? "bg-amber-50" : "bg-green-50"}`}>
+                    <p className={`text-xs mb-0.5 ${alreadyOptimal ? "text-amber-600" : "text-green-600"}`}>Saved</p>
+                    <p className={`font-bold text-sm ${alreadyOptimal ? "text-amber-700" : "text-green-700"}`}>
+                      {alreadyOptimal ? "Already optimal" : savedPct > 0 ? `-${savedPct}%` : "Similar size"}
                     </p>
                   </div>
                 </div>
