@@ -52,7 +52,7 @@ function ffmpegCompress(inputPath: string, outputPath: string, crf: string): Pro
   });
 }
 
-router.post("/api/compress-video", upload.single("video"), async (req, res) => {
+router.post("/compress-video", upload.single("video"), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No video file provided" });
     return;
