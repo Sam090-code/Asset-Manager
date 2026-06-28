@@ -70,6 +70,8 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
+        proxyTimeout: 300_000,  // 5 min — enough for large video compression
+        timeout: 300_000,
       },
     },
   },

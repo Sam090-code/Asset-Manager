@@ -126,27 +126,54 @@ export default function VideoCompressPage() {
 
         {/* Drop zone */}
         {!file ? (
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => inputRef.current?.click()}
-            className="border-2 border-dashed border-muted-foreground/25 hover:border-rose-400/60 rounded-2xl p-16 text-center cursor-pointer transition-colors group bg-muted/10 hover:bg-rose-50/30"
-          >
-            <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform">
-              <Video className="h-8 w-8 text-rose-500" />
+          <div className="space-y-4">
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => inputRef.current?.click()}
+              className="border-2 border-dashed border-muted-foreground/25 hover:border-rose-400/60 rounded-2xl p-16 text-center cursor-pointer transition-colors group bg-muted/10 hover:bg-rose-50/30"
+            >
+              <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform">
+                <Video className="h-8 w-8 text-rose-500" />
+              </div>
+              <p className="text-lg font-semibold text-foreground mb-1">Drop your video here</p>
+              <p className="text-sm text-muted-foreground mb-4">MP4, MOV, AVI, MKV — up to 500 MB</p>
+              <Button variant="outline" size="sm" className="pointer-events-none group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600 transition-colors">
+                <Upload className="h-4 w-4 mr-2" /> Select Video
+              </Button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelect(f); }}
+              />
             </div>
-            <p className="text-lg font-semibold text-foreground mb-1">Drop your video here</p>
-            <p className="text-sm text-muted-foreground mb-4">MP4, MOV, AVI, MKV — up to 500 MB</p>
-            <Button variant="outline" size="sm" className="pointer-events-none group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600 transition-colors">
-              <Upload className="h-4 w-4 mr-2" /> Select Video
-            </Button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelect(f); }}
-            />
+
+            {/* Sample videos */}
+            <div className="bg-muted/30 border rounded-2xl p-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Try a sample video
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "720p · 15 sec · 15 MB", file: "sample-720p-15s.mp4" },
+                  { label: "720p · 30 sec · 18 MB", file: "sample-30s-720p.mp4" },
+                  { label: "1080p · 60 sec · 20 MB", file: "sample-60s-1080p.mp4" },
+                ].map((s) => (
+                  <a
+                    key={s.file}
+                    href={`${BASE}/samples/${s.file}`}
+                    download={s.file}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-sm"
+                  >
+                    <Download className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate text-xs">{s.label}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-5">
