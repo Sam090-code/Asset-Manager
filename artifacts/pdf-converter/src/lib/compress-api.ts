@@ -5,11 +5,12 @@ export async function compressFileApi(file: File, level: 'low' | 'balanced' | 'm
   form.append('file', file);
   form.append('level', level);
 
-  const res = await fetch('/api/compress', { method: 'POST', body: form });
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const res = await fetch(`${base}/api/compress`, { method: 'POST', body: form });
   if (!res.ok) throw new Error('Compression failed');
   const result: CompressResult = await res.json();
 
-  const dlRes = await fetch(`/api/files/${result.fileId}/download`);
+  const dlRes = await fetch(`${base}/api/files/${result.fileId}/download`);
   if (!dlRes.ok) throw new Error('Download failed');
   const blob = await dlRes.blob();
   return { result, blob };

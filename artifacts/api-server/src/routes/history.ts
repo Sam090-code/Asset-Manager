@@ -47,20 +47,16 @@ router.post("/history", requireAuth, async (req: any, res) => {
       level: level ?? null,
     });
 
-    // Bump per-user counters (best-effort — matched by clerkUserId stored in email column isn't reliable,
-    // so we update the user whose email was used to sync; find by clerkUserId stored in name fallback.
-    // We look up the user by their email passed in the request body, if provided.
-    if (req.body.userEmail) {
-      const countUpdate =
-        type === "pdf"
-          ? { pdfsGenerated: sql`${usersTable.pdfsGenerated} + 1`, lastActiveAt: new Date() }
-          : { filesCompressed: sql`${usersTable.filesCompressed} + 1`, lastActiveAt: new Date() };
-      await db
-        .update(usersTable)
-        .set(countUpdate)
-        .where(eq(usersTable.email, req.body.userEmail))
-        .catch(() => {});
-    }
+    // Bump per-user counters using the server-verified clerkUserId — never client-supplied identity.
+    const countUpdate =
+      type === "pdf"
+        ? { pdfsGenerated: sql`${usersTable.pdfsGenerated} + 1`, lastActiveAt: new Date() }
+        : { filesCompressed: sql`${usersTable.filesCompressed} + 1`, lastActiveAt: new Date() };
+    await db
+      .update(usersTable)
+      .set(countUpdate)
+      .where(eq(usersTable.clerkUserId, req.userId))
+      .catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {

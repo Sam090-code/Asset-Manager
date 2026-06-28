@@ -44,6 +44,7 @@ export const conversionHistoryTable = pgTable("conversion_history", {
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
+  clerkUserId: text("clerk_user_id").unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   status: text("status").notNull().default("active"),

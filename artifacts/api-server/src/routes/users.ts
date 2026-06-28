@@ -20,6 +20,7 @@ function requireAuth(req: any, res: any, next: any) {
 router.post("/users/sync", requireAuth, async (req: any, res) => {
   try {
     const { name, email } = req.body as { name?: string; email?: string };
+    const clerkUserId: string = req.userId;
 
     if (!email) {
       res.status(400).json({ error: "email is required" });
@@ -31,6 +32,7 @@ router.post("/users/sync", requireAuth, async (req: any, res) => {
     await db
       .insert(usersTable)
       .values({
+        clerkUserId,
         name: displayName,
         email,
         status: "active",
@@ -38,16 +40,16 @@ router.post("/users/sync", requireAuth, async (req: any, res) => {
         lastActiveAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: usersTable.email,
+        target: usersTable.clerkUserId,
         set: {
           name: displayName,
+          email,
           lastActiveAt: new Date(),
         },
       });
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("users sync error:", err);
     res.status(500).json({ error: "Failed to sync user" });
   }
 });

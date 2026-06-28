@@ -38,35 +38,43 @@ const QUALITY_MAP: Record<string, { jpeg: number; webp: number; pdfGhostQuality:
   maximum:  { jpeg: 45, webp: 45, pdfGhostQuality: "screen",  pdfDpi: 72  },
 };
 
-async function compressImage(buffer: Buffer, mimetype: string, level: string): Promise<Buffer> {
+async function compressImage(
+  buffer: Buffer,
+  mimetype: string,
+  level: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
   const quality = QUALITY_MAP[level] ?? QUALITY_MAP.balanced;
 
-  let compressed: Buffer;
-
   if (mimetype === "image/png") {
-    // For PNG, try WebP (best compression with transparency), fall back to max-zlib PNG
-    compressed = await sharp(buffer)
+    // Try WebP first (best compression, supports transparency)
+    const webp = await sharp(buffer)
       .webp({ quality: quality.webp, effort: 6 })
       .toBuffer();
-    // If WebP is somehow larger, try max-zlib PNG as fallback
-    if (compressed.length >= buffer.length) {
-      compressed = await sharp(buffer)
-        .png({ compressionLevel: 9, effort: 10 })
-        .toBuffer();
+    if (webp.length < buffer.length) {
+      return { buffer: webp, mimeType: "image/webp" };
     }
-  } else if (mimetype === "image/webp") {
-    compressed = await sharp(buffer)
-      .webp({ quality: quality.webp, effort: 6 })
+    // Fall back to max-zlib PNG
+    const png = await sharp(buffer)
+      .png({ compressionLevel: 9, effort: 10 })
       .toBuffer();
-  } else {
-    // JPEG and others
-    compressed = await sharp(buffer)
-      .jpeg({ quality: quality.jpeg, mozjpeg: true })
-      .toBuffer();
+    const best = png.length < buffer.length ? png : buffer;
+    return { buffer: best, mimeType: "image/png" };
   }
 
-  // Never return a file larger than the original
-  return compressed.length < buffer.length ? compressed : buffer;
+  if (mimetype === "image/webp") {
+    const compressed = await sharp(buffer)
+      .webp({ quality: quality.webp, effort: 6 })
+      .toBuffer();
+    const best = compressed.length < buffer.length ? compressed : buffer;
+    return { buffer: best, mimeType: "image/webp" };
+  }
+
+  // JPEG and others
+  const compressed = await sharp(buffer)
+    .jpeg({ quality: quality.jpeg, mozjpeg: true })
+    .toBuffer();
+  const best = compressed.length < buffer.length ? compressed : buffer;
+  return { buffer: best, mimeType: "image/jpeg" };
 }
 
 async function compressPdf(buffer: Buffer, level: string): Promise<Buffer> {
@@ -123,21 +131,15 @@ async function compressPdf(buffer: Buffer, level: string): Promise<Buffer> {
   }
 }
 
-function outputMimeType(inputMime: string): string {
-  if (inputMime === "image/png") return "image/webp";
-  if (inputMime === "image/webp") return "image/webp";
-  return inputMime;
-}
-
-function outputExtension(inputMime: string): string {
+function mimeToExtension(mimeType: string): string {
   const map: Record<string, string> = {
     "image/jpeg": ".jpg",
     "image/jpg": ".jpg",
-    "image/png": ".webp",
+    "image/png": ".png",
     "image/webp": ".webp",
     "application/pdf": ".pdf",
   };
-  return map[inputMime] ?? ".bin";
+  return map[mimeType] ?? ".bin";
 }
 
 router.post("/compress", upload.single("file"), async (req, res) => {
@@ -157,17 +159,20 @@ router.post("/compress", upload.single("file"), async (req, res) => {
     const fileId = uuidv4();
 
     let compressedBuffer: Buffer;
+    let outMime: string;
     if (mimetype === "application/pdf") {
       compressedBuffer = await compressPdf(buffer, level);
+      outMime = "application/pdf";
     } else {
-      compressedBuffer = await compressImage(buffer, mimetype, level);
+      const result = await compressImage(buffer, mimetype, level);
+      compressedBuffer = result.buffer;
+      outMime = result.mimeType;
     }
 
     const compressedSize = compressedBuffer.length;
     const savedBytes = Math.max(0, size - compressedSize);
     const compressionRatio = size > 0 ? Math.round((savedBytes / size) * 100) : 0;
-    const outMime = outputMimeType(mimetype);
-    const outExt = outputExtension(mimetype);
+    const outExt = mimeToExtension(outMime);
 
     const baseName = path.basename(originalname, path.extname(originalname));
     const outputName = `${baseName}${outExt}`;

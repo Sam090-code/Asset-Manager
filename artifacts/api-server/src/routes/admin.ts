@@ -21,8 +21,15 @@ import {
 
 const router: IRouter = Router();
 
-const JWT_SECRET = process.env.SESSION_SECRET ?? "dev-admin-secret-change-me";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "admin123";
+const JWT_SECRET = process.env.SESSION_SECRET;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!JWT_SECRET) {
+  throw new Error("SESSION_SECRET env var is required — refusing to start with an insecure admin JWT secret.");
+}
+if (!ADMIN_PASSWORD) {
+  throw new Error("ADMIN_PASSWORD env var is required — refusing to start with no admin password set.");
+}
 
 function signToken(): string {
   return jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "8h" });
