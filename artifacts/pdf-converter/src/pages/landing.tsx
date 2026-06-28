@@ -2,7 +2,6 @@ import { Link, useLocation } from "wouter";
 import { FileText, FileUp, Info, ArrowRight, ShieldCheck, Zap, Download, RotateCcw } from "lucide-react";
 import { Show, useClerk } from "@clerk/react";
 import { Button } from "@/components/ui/button";
-import { StatsWidget } from "@/components/StatsWidget";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -201,16 +200,13 @@ export default function Landing() {
         </section>
       </main>
 
-      {/* Stats + footer */}
-      <div>
-        <StatsWidget />
-        <footer className="py-6 text-center text-sm text-muted-foreground border-t bg-muted/10">
-          <p>DocuFlow Productivity Suite &copy; {new Date().getFullYear()}</p>
-          <Link href="/admin" className="mt-1 inline-block text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-            Admin
-          </Link>
-        </footer>
-      </div>
+      {/* Footer */}
+      <footer className="py-6 text-center text-sm text-muted-foreground border-t bg-muted/10">
+        <p>DocuFlow Productivity Suite &copy; {new Date().getFullYear()}</p>
+        <Link href="/admin" className="mt-1 inline-block text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+          Admin
+        </Link>
+      </footer>
     </div>
   );
 }
