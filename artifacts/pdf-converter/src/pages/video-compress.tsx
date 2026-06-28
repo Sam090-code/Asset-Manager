@@ -215,31 +215,34 @@ export default function VideoCompressPage() {
           </div>
         ) : (
           <div className="space-y-5">
-            {/* Video preview */}
-            <div className="bg-card border rounded-2xl overflow-hidden">
-              <div className="relative bg-black aspect-video">
-                {previewUrl && (
-                  <video
-                    src={previewUrl}
-                    className="w-full h-full object-contain"
-                    controls
-                    onLoadedMetadata={(e) => setVideoDuration((e.target as HTMLVideoElement).duration)}
-                  />
-                )}
-                <button
-                  onClick={reset}
-                  className="absolute top-3 right-3 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+            {/* Hidden video just to read duration */}
+            {previewUrl && (
+              <video
+                src={previewUrl}
+                className="hidden"
+                preload="metadata"
+                onLoadedMetadata={(e) => setVideoDuration((e.target as HTMLVideoElement).duration)}
+              />
+            )}
+
+            {/* File info card */}
+            <div className="bg-card border rounded-2xl p-4 flex items-center gap-4">
+              <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Film className="h-6 w-6 text-rose-500" />
               </div>
-              <div className="px-5 py-4">
+              <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm truncate">{file.name}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {formatBytes(originalSize)}
                   {videoDuration != null && ` · ${formatTime(videoDuration)}`}
                 </p>
               </div>
+              <button
+                onClick={reset}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
             </div>
 
             {/* Quality + compress button */}
