@@ -1,0 +1,1 @@
+- [Vite proxy keep-alive bug](vite-proxy-keepalive.md) — large upload + streaming download corrupts pooled TCP connection; fix with `agent: new http.Agent({ keepAlive: false })` on proxy route.

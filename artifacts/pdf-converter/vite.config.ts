@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import http from "http";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const rawPort = process.env.PORT;
@@ -70,8 +71,11 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
-        proxyTimeout: 300_000,  // 5 min — enough for large video compression
+        proxyTimeout: 300_000,
         timeout: 300_000,
+        // Force a new TCP connection per request — prevents stale
+        // keep-alive connections from breaking second+ uploads
+        agent: new http.Agent({ keepAlive: false }),
       },
     },
   },
