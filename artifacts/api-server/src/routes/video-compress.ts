@@ -1,5 +1,5 @@
-import { Router, type IRouter } from "express";
-import multer from "multer";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import multer, { MulterError } from "multer";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs";
@@ -30,6 +30,13 @@ const BITRATE_FACTOR: Record<string, number> = {
   low: 0.35,       // keep 35% of original bitrate
   balanced: 0.55,  // keep 55%
   high: 0.75,      // keep 75%
+};
+
+// Fixed audio bitrates per quality preset — independent of video bitrate
+const AUDIO_BITRATE: Record<string, string> = {
+  low: "64k",
+  balanced: "96k",
+  high: "128k",
 };
 
 type Job = {
@@ -75,16 +82,17 @@ function getVideoBitrate(inputPath: string): Promise<number> {
   });
 }
 
-function runFFmpeg(inputPath: string, outputPath: string, targetBitrate: number): Promise<void> {
-  // Cap audio bitrate below source video bitrate
-  const audioBitrate = Math.min(128, Math.floor(targetBitrate / 1000 / 8)) + "k";
+function runFFmpeg(inputPath: string, outputPath: string, targetBitrate: number, quality: string): Promise<void> {
+  // Enforce a minimum video bitrate so ffmpeg never gets "0k"
+  const videoBitrateK = Math.max(50, Math.floor(targetBitrate / 1000));
+  const audioBitrate = AUDIO_BITRATE[quality] ?? AUDIO_BITRATE.balanced;
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
       "-y", "-i", inputPath,
       "-c:v", "libx264",
-      "-b:v", `${Math.floor(targetBitrate / 1000)}k`,
-      "-maxrate", `${Math.floor(targetBitrate / 1000 * 1.5)}k`,
-      "-bufsize", `${Math.floor(targetBitrate / 1000 * 3)}k`,
+      "-b:v", `${videoBitrateK}k`,
+      "-maxrate", `${Math.floor(videoBitrateK * 1.5)}k`,
+      "-bufsize", `${Math.floor(videoBitrateK * 3)}k`,
       "-preset", "fast",
       "-c:a", "aac", "-b:a", audioBitrate,
       "-movflags", "+faststart",
@@ -123,7 +131,7 @@ router.post("/compress-video", upload.single("video"), (req, res) => {
 
   // Run in background — probe bitrate first, then compress
   getVideoBitrate(inputPath)
-    .then((srcBitrate) => runFFmpeg(inputPath, outputPath, Math.floor(srcBitrate * factor)))
+    .then((srcBitrate) => runFFmpeg(inputPath, outputPath, Math.floor(srcBitrate * factor), quality))
     .then(() => {
       const job = jobs.get(id);
       if (job) {
@@ -182,6 +190,21 @@ router.get("/compress-video/:id/download", (req, res) => {
     if (job.outputPath) try { fs.unlinkSync(job.outputPath); } catch {}
     jobs.delete(req.params.id);
   });
+});
+
+// Multer error handler — must have 4 params to be recognised as an error handler by Express
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+router.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof MulterError) {
+    const msg = err.code === "LIMIT_FILE_SIZE"
+      ? "File too large — maximum size is 500 MB"
+      : `Upload error: ${err.message}`;
+    res.status(400).json({ error: msg });
+  } else if (err?.message === "Only video files are supported") {
+    res.status(400).json({ error: err.message });
+  } else {
+    res.status(500).json({ error: "Internal server error during upload" });
+  }
 });
 
 export default router;
