@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { FileUp, FileText, Info, ShieldCheck, LogIn, LogOut, User, History } from "lucide-react";
+import { FileUp, FileText, Info, ShieldCheck, LogIn, LogOut, User, History, MoreHorizontal, Film, Zap, FileArchive, ArrowRight } from "lucide-react";
 import { useClerk, useUser, Show } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,8 +9,96 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useState } from "react";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const OTHER_FEATURES = [
+  {
+    href: "/video-compress",
+    label: "Video Compressor",
+    description: "Shrink any video right in your browser — no upload needed.",
+    icon: Film,
+    badge: "New",
+    color: "bg-rose-50 text-rose-600",
+  },
+];
+
+function ExploreMenu() {
+  const [open, setOpen] = useState(false);
+  const [, setLocation] = useLocation();
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-8 h-8 p-0 text-muted-foreground hover:text-foreground"
+          aria-label="Explore other features"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-80 p-0 rounded-2xl shadow-xl border overflow-hidden"
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" />
+            <p className="font-bold text-sm">Explore our other features</p>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            More tools from DocuFlow, just a click away.
+          </p>
+        </div>
+
+        {/* Feature cards */}
+        <div className="p-3 space-y-2">
+          {OTHER_FEATURES.map((f) => (
+            <button
+              key={f.href}
+              onClick={() => {
+                setOpen(false);
+                setLocation(f.href);
+              }}
+              className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-muted/60 transition-colors text-left group"
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${f.color}`}>
+                <f.icon className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-sm">{f.label}</p>
+                  {f.badge && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded-full">
+                      {f.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{f.description}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground mt-0.5 flex-shrink-0 transition-colors" />
+            </button>
+          ))}
+        </div>
+
+        {/* Footer hint */}
+        <div className="px-5 py-3 border-t bg-muted/20 text-center">
+          <p className="text-[11px] text-muted-foreground">More tools coming soon</p>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function Navbar() {
   const [location, setLocation] = useLocation();
@@ -70,6 +158,9 @@ export function Navbar() {
         </Show>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Explore dots menu */}
+          <ExploreMenu />
+
           <Show when="signed-out">
             <Button
               variant="ghost"

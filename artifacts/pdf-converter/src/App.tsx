@@ -12,6 +12,7 @@ import Home from "@/pages/home";
 import Compress from "@/pages/compress";
 import About from "@/pages/about";
 import HistoryPage from "@/pages/history";
+import VideoCompressPage from "@/pages/video-compress";
 import AdminLogin from "@/pages/admin/login";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
@@ -181,6 +182,7 @@ function Router() {
       <Route path="/compress" component={Compress} />
       <Route path="/about" component={About} />
       <Route path="/history" component={HistoryPage} />
+      <Route path="/video-compress" component={VideoCompressPage} />
 
       <Route component={NotFound} />
     </Switch>
