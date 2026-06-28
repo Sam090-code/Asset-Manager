@@ -37,12 +37,12 @@ function ExploreMenu() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="w-8 h-8 p-0 text-muted-foreground hover:text-foreground"
+          className="w-8 h-8 p-0 border-border text-foreground hover:bg-muted"
           aria-label="Explore other features"
         >
-          <MoreHorizontal className="h-5 w-5" />
+          <MoreHorizontal className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -158,10 +158,7 @@ export function Navbar() {
         </Show>
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Explore dots menu */}
-          <ExploreMenu />
-
-          <Show when="signed-out">
+            <Show when="signed-out">
             <Button
               variant="ghost"
               size="sm"
@@ -218,17 +215,8 @@ export function Navbar() {
             </DropdownMenu>
           </Show>
 
-          <Link
-            href="/admin"
-            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              location.startsWith("/admin")
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            <span className="hidden md:inline-block">Admin</span>
-          </Link>
+          {/* Explore dots menu — always visible */}
+          <ExploreMenu />
         </div>
       </div>
     </header>
