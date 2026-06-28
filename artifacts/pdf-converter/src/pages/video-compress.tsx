@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +8,7 @@ import {
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type Stage = "idle" | "compressing" | "done" | "error";
+type Stage = "idle" | "uploading" | "compressing" | "done" | "error";
 
 function formatBytes(b: number | null | undefined) {
   if (!b) return "—";
@@ -35,12 +35,49 @@ export default function VideoCompressPage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [quality, setQuality] = useState("balanced");
-  const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [originalSize, setOriginalSize] = useState<number | null>(null);
   const [compressedSize, setCompressedSize] = useState<number | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [downloadName, setDownloadName] = useState("compressed.mp4");
   const [error, setError] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [dots, setDots] = useState(".");
   const inputRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Animate dots while compressing
+  useEffect(() => {
+    if (stage !== "compressing") return;
+    const t = setInterval(() => setDots((d) => d.length >= 3 ? "." : d + "."), 600);
+    return () => clearInterval(t);
+  }, [stage]);
+
+  // Poll job status
+  useEffect(() => {
+    if (!jobId || stage !== "compressing") return;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${BASE}/api/compress-video/${jobId}/status`);
+        if (!res.ok) throw new Error("Poll failed");
+        const data = await res.json();
+
+        if (data.status === "done") {
+          clearInterval(pollRef.current!);
+          setCompressedSize(data.compressedSize);
+          setStage("done");
+        } else if (data.status === "error") {
+          clearInterval(pollRef.current!);
+          setError(data.error ?? "Compression failed on the server.");
+          setStage("idle");
+        }
+      } catch {
+        // transient poll error — keep trying
+      }
+    }, 2000);
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [jobId, stage]);
 
   const onFileSelect = useCallback((f: File) => {
     if (!f.type.startsWith("video/")) {
@@ -49,8 +86,8 @@ export default function VideoCompressPage() {
     }
     setFile(f);
     setOriginalSize(f.size);
-    setOutputUrl(null);
     setCompressedSize(null);
+    setJobId(null);
     setError(null);
     setPreviewUrl(URL.createObjectURL(f));
     setStage("idle");
@@ -62,21 +99,18 @@ export default function VideoCompressPage() {
     if (f) onFileSelect(f);
   }, [onFileSelect]);
 
-  const [downloadId, setDownloadId] = useState<string | null>(null);
-  const [downloadName, setDownloadName] = useState("compressed.mp4");
-
   const compress = useCallback(async () => {
     if (!file) return;
-    setStage("compressing");
+    setStage("uploading");
     setError(null);
-    setDownloadId(null);
+    setJobId(null);
 
     try {
       const form = new FormData();
       form.append("video", file);
       form.append("quality", quality);
 
-      // Step 1 — upload + compress; response is tiny JSON, not the video
+      // Returns immediately with { id } — compression runs in background
       const res = await fetch(`${BASE}/api/compress-video`, {
         method: "POST",
         body: form,
@@ -84,28 +118,26 @@ export default function VideoCompressPage() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as any).error ?? "Compression failed");
+        throw new Error((body as any).error ?? "Upload failed");
       }
 
-      const { id, originalSize: orig, compressedSize: comp } = await res.json();
-      setOriginalSize(orig);
-      setCompressedSize(comp);
-      setDownloadId(id);
+      const { id } = await res.json();
       setDownloadName(`compressed_${file.name.replace(/\.[^.]+$/, "")}.mp4`);
-      setStage("done");
+      setJobId(id);
+      setStage("compressing"); // triggers polling via useEffect
     } catch (err: any) {
-      setError(err.message ?? "Compression failed. Please try again.");
+      setError(err.message ?? "Upload failed. Please try again.");
       setStage("idle");
     }
   }, [file, quality]);
 
   const reset = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
     setFile(null);
     setPreviewUrl(null);
-    setOutputUrl(null);
     setOriginalSize(null);
     setCompressedSize(null);
-    setDownloadId(null);
+    setJobId(null);
     setError(null);
     setVideoDuration(null);
     setStage("idle");
@@ -113,7 +145,6 @@ export default function VideoCompressPage() {
 
   const savedBytes = originalSize && compressedSize ? originalSize - compressedSize : 0;
   const savedPct = originalSize && compressedSize ? Math.round((savedBytes / originalSize) * 100) : 0;
-  const outputName = file ? `compressed_${file.name.replace(/\.[^.]+$/, "")}.mp4` : "compressed.mp4";
 
   return (
     <Layout>
@@ -173,10 +204,10 @@ export default function VideoCompressPage() {
                     href={`${BASE}/samples/${s.file}`}
                     download={s.file}
                     onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-sm"
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border bg-card hover:bg-muted/50 transition-colors"
                   >
                     <Download className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate text-xs">{s.label}</span>
+                    <span className="text-xs">{s.label}</span>
                   </a>
                 ))}
               </div>
@@ -212,7 +243,7 @@ export default function VideoCompressPage() {
             </div>
 
             {/* Quality + compress button */}
-            {stage !== "compressing" && stage !== "done" && (
+            {stage === "idle" && (
               <div className="bg-card border rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Settings2 className="h-4 w-4 text-muted-foreground" />
@@ -240,21 +271,39 @@ export default function VideoCompressPage() {
               </div>
             )}
 
-            {/* Compressing state */}
+            {/* Uploading */}
+            {stage === "uploading" && (
+              <div className="bg-card border rounded-2xl p-8 text-center">
+                <Loader2 className="h-8 w-8 text-rose-500 animate-spin mx-auto mb-3" />
+                <p className="font-semibold">Uploading{dots}</p>
+                <p className="text-sm text-muted-foreground mt-1">Sending your video to the server</p>
+              </div>
+            )}
+
+            {/* Compressing */}
             {stage === "compressing" && (
               <div className="bg-card border rounded-2xl p-8 text-center">
                 <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Loader2 className="h-7 w-7 text-rose-600 animate-spin" />
                 </div>
-                <p className="font-semibold text-lg mb-1">Compressing your video…</p>
-                <p className="text-sm text-muted-foreground">
-                  This may take a minute for large files. Please keep this tab open.
+                <p className="font-semibold text-lg">Compressing{dots}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  FFmpeg is working on it — this may take a minute for larger files.
                 </p>
+                <div className="mt-4 flex justify-center gap-1.5">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 bg-rose-400 rounded-full animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s` }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
             {/* Done */}
-            {stage === "done" && outputUrl && (
+            {stage === "done" && jobId && (
               <div className="bg-card border rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center">
@@ -285,7 +334,7 @@ export default function VideoCompressPage() {
 
                 <div className="flex gap-3">
                   <Button asChild className="flex-1 gap-2 bg-rose-600 hover:bg-rose-700">
-                    <a href={`${BASE}/api/compress-video/${downloadId}/download`} download={downloadName}>
+                    <a href={`${BASE}/api/compress-video/${jobId}/download`} download={downloadName}>
                       <Download className="h-4 w-4" /> Download MP4
                     </a>
                   </Button>

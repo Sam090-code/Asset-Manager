@@ -8,7 +8,6 @@ import { spawn } from "child_process";
 
 const router: IRouter = Router();
 
-// Write directly to disk — never load video into RAM
 const storage = multer.diskStorage({
   destination(_req, _file, cb) { cb(null, os.tmpdir()); },
   filename(_req, file, cb) {
@@ -30,20 +29,30 @@ const CRF_MAP: Record<string, string> = {
   low: "35", balanced: "28", high: "20",
 };
 
-// In-memory registry of ready files; cleaned up on download or after 15 min
-const readyFiles = new Map<string, { outputPath: string; originalSize: number; compressedSize: number; baseName: string; expires: number }>();
+type Job = {
+  status: "processing" | "done" | "error";
+  originalSize: number;
+  compressedSize?: number;
+  outputPath?: string;
+  baseName: string;
+  error?: string;
+  expires: number;
+};
 
+const jobs = new Map<string, Job>();
+
+// Clean up expired jobs every minute
 setInterval(() => {
   const now = Date.now();
-  for (const [id, entry] of readyFiles) {
-    if (now > entry.expires) {
-      try { fs.unlinkSync(entry.outputPath); } catch {}
-      readyFiles.delete(id);
+  for (const [id, job] of jobs) {
+    if (now > job.expires) {
+      if (job.outputPath) try { fs.unlinkSync(job.outputPath); } catch {}
+      jobs.delete(id);
     }
   }
 }, 60_000);
 
-function ffmpegCompress(inputPath: string, outputPath: string, crf: string): Promise<void> {
+function runFFmpeg(inputPath: string, outputPath: string, crf: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
       "-y", "-i", inputPath,
@@ -62,8 +71,8 @@ function ffmpegCompress(inputPath: string, outputPath: string, crf: string): Pro
   });
 }
 
-// STEP 1 — Upload + compress → returns { id, originalSize, compressedSize }
-router.post("/compress-video", upload.single("video"), async (req, res) => {
+// POST — accept upload, kick off compression in background, return job ID immediately
+router.post("/compress-video", upload.single("video"), (req, res) => {
   const inputPath = req.file?.path;
   if (!req.file || !inputPath) {
     res.status(400).json({ error: "No video file provided" });
@@ -76,50 +85,72 @@ router.post("/compress-video", upload.single("video"), async (req, res) => {
   const outputPath = path.join(os.tmpdir(), `vcout_${id}.mp4`);
   const baseName = req.file.originalname?.replace(/\.[^.]+$/, "") ?? "video";
 
-  try {
-    await ffmpegCompress(inputPath, outputPath, crf);
-    const compressedSize = fs.statSync(outputPath).size;
+  jobs.set(id, {
+    status: "processing",
+    originalSize: req.file.size,
+    baseName,
+    expires: Date.now() + 30 * 60 * 1000, // 30 min
+  });
 
-    readyFiles.set(id, {
-      outputPath,
-      originalSize: req.file.size,
-      compressedSize,
-      baseName,
-      expires: Date.now() + 15 * 60 * 1000,
+  // Run in background — don't await
+  runFFmpeg(inputPath, outputPath, crf)
+    .then(() => {
+      const job = jobs.get(id);
+      if (job) {
+        job.status = "done";
+        job.outputPath = outputPath;
+        job.compressedSize = fs.statSync(outputPath).size;
+      }
+    })
+    .catch((err) => {
+      const job = jobs.get(id);
+      if (job) { job.status = "error"; job.error = String(err); }
+      try { fs.unlinkSync(outputPath); } catch {}
+    })
+    .finally(() => {
+      try { fs.unlinkSync(inputPath); } catch {}
     });
 
-    res.json({ id, originalSize: req.file.size, compressedSize });
-  } catch (err) {
-    console.error("Video compression error:", err);
-    try { fs.unlinkSync(outputPath); } catch {}
-    res.status(500).json({ error: "Compression failed. Please try a different file or format." });
-  } finally {
-    try { fs.unlinkSync(inputPath); } catch {}
-  }
+  // Respond immediately with the job ID
+  res.json({ id, originalSize: req.file.size });
 });
 
-// STEP 2 — Fetch the compressed file by ID
+// GET status — client polls this every 2s
+router.get("/compress-video/:id/status", (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: "Job not found or expired" });
+    return;
+  }
+  res.json({
+    status: job.status,
+    originalSize: job.originalSize,
+    compressedSize: job.compressedSize,
+    error: job.error,
+  });
+});
+
+// GET download — streams the file once done
 router.get("/compress-video/:id/download", (req, res) => {
-  const entry = readyFiles.get(req.params.id);
-  if (!entry) {
-    res.status(404).json({ error: "File not found or expired. Please compress again." });
+  const job = jobs.get(req.params.id);
+  if (!job || job.status !== "done" || !job.outputPath) {
+    res.status(404).json({ error: "File not ready or not found" });
     return;
   }
 
-  const filename = `compressed_${entry.baseName}.mp4`;
   res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.setHeader("Content-Length", String(entry.compressedSize));
+  res.setHeader("Content-Disposition", `attachment; filename="compressed_${job.baseName}.mp4"`);
+  if (job.compressedSize) res.setHeader("Content-Length", String(job.compressedSize));
 
-  const stream = fs.createReadStream(entry.outputPath);
+  const stream = fs.createReadStream(job.outputPath);
   stream.pipe(res);
   stream.on("close", () => {
-    readyFiles.delete(req.params.id);
-    try { fs.unlinkSync(entry.outputPath); } catch {}
+    if (job.outputPath) try { fs.unlinkSync(job.outputPath); } catch {}
+    jobs.delete(req.params.id);
   });
   stream.on("error", () => {
-    readyFiles.delete(req.params.id);
-    try { fs.unlinkSync(entry.outputPath); } catch {}
+    if (job.outputPath) try { fs.unlinkSync(job.outputPath); } catch {}
+    jobs.delete(req.params.id);
   });
 });
 
