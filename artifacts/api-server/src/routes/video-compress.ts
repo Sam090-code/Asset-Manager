@@ -25,8 +25,11 @@ const upload = multer({
   },
 });
 
-const CRF_MAP: Record<string, string> = {
-  low: "35", balanced: "28", high: "20",
+// Bitrate reduction factors per quality preset
+const BITRATE_FACTOR: Record<string, number> = {
+  low: 0.35,       // keep 35% of original bitrate
+  balanced: 0.55,  // keep 55%
+  high: 0.75,      // keep 75%
 };
 
 type Job = {
@@ -52,12 +55,38 @@ setInterval(() => {
   }
 }, 60_000);
 
-function runFFmpeg(inputPath: string, outputPath: string, crf: string): Promise<void> {
+function getVideoBitrate(inputPath: string): Promise<number> {
+  return new Promise((resolve) => {
+    const proc = spawn("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=bit_rate",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      inputPath,
+    ]);
+    let out = "";
+    proc.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+    proc.on("close", () => {
+      const parsed = parseInt(out.trim(), 10);
+      // Fall back to a sensible default (2 Mbps) if ffprobe can't read it
+      resolve(isNaN(parsed) || parsed <= 0 ? 2_000_000 : parsed);
+    });
+    proc.on("error", () => resolve(2_000_000));
+  });
+}
+
+function runFFmpeg(inputPath: string, outputPath: string, targetBitrate: number): Promise<void> {
+  // Cap audio bitrate below source video bitrate
+  const audioBitrate = Math.min(128, Math.floor(targetBitrate / 1000 / 8)) + "k";
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
       "-y", "-i", inputPath,
-      "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-      "-c:a", "aac", "-b:a", "128k",
+      "-c:v", "libx264",
+      "-b:v", `${Math.floor(targetBitrate / 1000)}k`,
+      "-maxrate", `${Math.floor(targetBitrate / 1000 * 1.5)}k`,
+      "-bufsize", `${Math.floor(targetBitrate / 1000 * 3)}k`,
+      "-preset", "fast",
+      "-c:a", "aac", "-b:a", audioBitrate,
       "-movflags", "+faststart",
       outputPath,
     ]);
@@ -80,7 +109,7 @@ router.post("/compress-video", upload.single("video"), (req, res) => {
   }
 
   const quality = (req.body?.quality as string) || "balanced";
-  const crf = CRF_MAP[quality] ?? CRF_MAP.balanced;
+  const factor = BITRATE_FACTOR[quality] ?? BITRATE_FACTOR.balanced;
   const id = uuidv4();
   const outputPath = path.join(os.tmpdir(), `vcout_${id}.mp4`);
   const baseName = req.file.originalname?.replace(/\.[^.]+$/, "") ?? "video";
@@ -89,11 +118,12 @@ router.post("/compress-video", upload.single("video"), (req, res) => {
     status: "processing",
     originalSize: req.file.size,
     baseName,
-    expires: Date.now() + 30 * 60 * 1000, // 30 min
+    expires: Date.now() + 30 * 60 * 1000,
   });
 
-  // Run in background — don't await
-  runFFmpeg(inputPath, outputPath, crf)
+  // Run in background — probe bitrate first, then compress
+  getVideoBitrate(inputPath)
+    .then((srcBitrate) => runFFmpeg(inputPath, outputPath, Math.floor(srcBitrate * factor)))
     .then(() => {
       const job = jobs.get(id);
       if (job) {
