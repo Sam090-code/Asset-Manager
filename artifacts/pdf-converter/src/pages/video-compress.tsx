@@ -1,20 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import {
   Video, Upload, Download, X, AlertCircle,
   CheckCircle2, Loader2, Film, Zap, Settings2,
 } from "lucide-react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
-type Stage = "idle" | "loading-ffmpeg" | "ready" | "compressing" | "done" | "error";
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const CORE_VERSION = "0.12.6";
-const CDN = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd`;
+type Stage = "idle" | "compressing" | "done" | "error";
 
-function formatBytes(b: number) {
+function formatBytes(b: number | null | undefined) {
   if (!b) return "—";
   const k = 1024;
   const s = ["B", "KB", "MB", "GB"];
@@ -22,56 +18,29 @@ function formatBytes(b: number) {
   return `${(b / Math.pow(k, i)).toFixed(1)} ${s[i]}`;
 }
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 const QUALITY_PRESETS = [
-  { label: "Low", crf: 35, description: "Smallest file, lower quality" },
-  { label: "Balanced", crf: 28, description: "Good balance (recommended)" },
-  { label: "High", crf: 20, description: "Best quality, larger file" },
+  { label: "Low", value: "low", description: "Smallest file, reduced quality" },
+  { label: "Balanced", value: "balanced", description: "Best of both (recommended)" },
+  { label: "High", value: "high", description: "Best quality, larger file" },
 ];
 
 export default function VideoCompressPage() {
-  const ffmpegRef = useRef<FFmpeg | null>(null);
   const [stage, setStage] = useState<Stage>("idle");
-  const [loadProgress, setLoadProgress] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [qualityIdx, setQualityIdx] = useState(1);
-  const [compressProgress, setCompressProgress] = useState(0);
+  const [quality, setQuality] = useState("balanced");
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
-  const [outputSize, setOutputSize] = useState<number | null>(null);
+  const [originalSize, setOriginalSize] = useState<number | null>(null);
+  const [compressedSize, setCompressedSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const loadFFmpeg = useCallback(async () => {
-    if (ffmpegRef.current) return;
-    setStage("loading-ffmpeg");
-    setLoadProgress(10);
-    try {
-      const ffmpeg = new FFmpeg();
-      ffmpeg.on("progress", ({ progress }) => {
-        setCompressProgress(Math.round(progress * 100));
-      });
-      setLoadProgress(30);
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${CDN}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${CDN}/ffmpeg-core.wasm`, "application/wasm"),
-      });
-      setLoadProgress(100);
-      ffmpegRef.current = ffmpeg;
-      setStage("ready");
-    } catch (e) {
-      console.error("FFmpeg load error:", e);
-      setError("Failed to load video engine. Please check your connection and try again.");
-      setStage("error");
-    }
-  }, []);
 
   const onFileSelect = useCallback((f: File) => {
     if (!f.type.startsWith("video/")) {
@@ -79,15 +48,13 @@ export default function VideoCompressPage() {
       return;
     }
     setFile(f);
+    setOriginalSize(f.size);
     setOutputUrl(null);
-    setOutputSize(null);
+    setCompressedSize(null);
     setError(null);
-    setCompressProgress(0);
-    const url = URL.createObjectURL(f);
-    setPreviewUrl(url);
-    if (stage === "idle") loadFFmpeg();
-    else setStage("ready");
-  }, [stage, loadFFmpeg]);
+    setPreviewUrl(URL.createObjectURL(f));
+    setStage("idle");
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -96,51 +63,50 @@ export default function VideoCompressPage() {
   }, [onFileSelect]);
 
   const compress = useCallback(async () => {
-    if (!ffmpegRef.current || !file) return;
+    if (!file) return;
     setStage("compressing");
-    setCompressProgress(0);
     setError(null);
-    const ffmpeg = ffmpegRef.current;
-    const ext = file.name.split(".").pop() ?? "mp4";
-    const inputName = `input.${ext}`;
-    const outputName = "output.mp4";
+
     try {
-      await ffmpeg.writeFile(inputName, await fetchFile(file));
-      const crf = String(QUALITY_PRESETS[qualityIdx].crf);
-      await ffmpeg.exec([
-        "-i", inputName,
-        "-c:v", "libx264",
-        "-crf", crf,
-        "-preset", "fast",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        outputName,
-      ]);
-      const data = await ffmpeg.readFile(outputName);
-      const blob = new Blob([data], { type: "video/mp4" });
-      setOutputSize(blob.size);
+      const form = new FormData();
+      form.append("video", file);
+      form.append("quality", quality);
+
+      const res = await fetch(`${BASE}/api/compress-video`, {
+        method: "POST",
+        body: form,
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error ?? "Compression failed");
+      }
+
+      const blob = await res.blob();
+      const size = Number(res.headers.get("X-Compressed-Size")) || blob.size;
+      setCompressedSize(size);
       setOutputUrl(URL.createObjectURL(blob));
       setStage("done");
-    } catch {
-      setError("Compression failed. The video format may not be supported. Please try an MP4 file.");
-      setStage("ready");
+    } catch (err: any) {
+      setError(err.message ?? "Compression failed. Please try again.");
+      setStage("idle");
     }
-  }, [file, qualityIdx]);
+  }, [file, quality]);
 
   const reset = () => {
     setFile(null);
     setPreviewUrl(null);
     setOutputUrl(null);
-    setOutputSize(null);
+    setOriginalSize(null);
+    setCompressedSize(null);
     setError(null);
-    setCompressProgress(0);
     setVideoDuration(null);
-    setStage(ffmpegRef.current ? "ready" : "idle");
+    setStage("idle");
   };
 
-  const savedBytes = file && outputSize ? file.size - outputSize : 0;
-  const savedPct = file && outputSize ? Math.round((savedBytes / file.size) * 100) : 0;
+  const savedBytes = originalSize && compressedSize ? originalSize - compressedSize : 0;
+  const savedPct = originalSize && compressedSize ? Math.round((savedBytes / originalSize) * 100) : 0;
+  const outputName = file ? `compressed_${file.name.replace(/\.[^.]+$/, "")}.mp4` : "compressed.mp4";
 
   return (
     <Layout>
@@ -154,25 +120,24 @@ export default function VideoCompressPage() {
             <h1 className="text-3xl font-extrabold tracking-tight">Video Compressor</h1>
           </div>
           <p className="text-muted-foreground">
-            Reduce your video file size directly in the browser — nothing is uploaded to any server.
+            Upload a video and we'll compress it server-side using FFmpeg — fast and reliable.
           </p>
         </div>
 
         {/* Drop zone */}
         {!file ? (
           <div
-            ref={dropRef}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             onClick={() => inputRef.current?.click()}
-            className="border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 rounded-2xl p-16 text-center cursor-pointer transition-colors group bg-muted/10 hover:bg-primary/5"
+            className="border-2 border-dashed border-muted-foreground/25 hover:border-rose-400/60 rounded-2xl p-16 text-center cursor-pointer transition-colors group bg-muted/10 hover:bg-rose-50/30"
           >
             <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform">
               <Video className="h-8 w-8 text-rose-500" />
             </div>
             <p className="text-lg font-semibold text-foreground mb-1">Drop your video here</p>
-            <p className="text-sm text-muted-foreground mb-4">or click to browse — MP4, MOV, AVI, MKV supported</p>
-            <Button variant="outline" size="sm" className="pointer-events-none group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
+            <p className="text-sm text-muted-foreground mb-4">MP4, MOV, AVI, MKV — up to 500 MB</p>
+            <Button variant="outline" size="sm" className="pointer-events-none group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600 transition-colors">
               <Upload className="h-4 w-4 mr-2" /> Select Video
             </Button>
             <input
@@ -185,7 +150,7 @@ export default function VideoCompressPage() {
           </div>
         ) : (
           <div className="space-y-5">
-            {/* Video preview card */}
+            {/* Video preview */}
             <div className="bg-card border rounded-2xl overflow-hidden">
               <div className="relative bg-black aspect-video">
                 {previewUrl && (
@@ -203,18 +168,16 @@ export default function VideoCompressPage() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
-                <div>
-                  <p className="font-semibold text-sm truncate max-w-[240px]">{file.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatBytes(file.size)}
-                    {videoDuration != null && ` · ${formatTime(videoDuration)}`}
-                  </p>
-                </div>
+              <div className="px-5 py-4">
+                <p className="font-semibold text-sm truncate">{file.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {formatBytes(originalSize)}
+                  {videoDuration != null && ` · ${formatTime(videoDuration)}`}
+                </p>
               </div>
             </div>
 
-            {/* Quality selector */}
+            {/* Quality + compress button */}
             {stage !== "compressing" && stage !== "done" && (
               <div className="bg-card border rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-4">
@@ -222,13 +185,13 @@ export default function VideoCompressPage() {
                   <h3 className="font-semibold text-sm">Compression Quality</h3>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-5">
-                  {QUALITY_PRESETS.map((p, i) => (
+                  {QUALITY_PRESETS.map((p) => (
                     <button
-                      key={p.label}
-                      onClick={() => setQualityIdx(i)}
+                      key={p.value}
+                      onClick={() => setQuality(p.value)}
                       className={`border rounded-xl p-3 text-left transition-all ${
-                        qualityIdx === i
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        quality === p.value
+                          ? "border-rose-500 bg-rose-50/60 ring-1 ring-rose-400"
                           : "hover:border-muted-foreground/40 hover:bg-muted/30"
                       }`}
                     >
@@ -237,66 +200,46 @@ export default function VideoCompressPage() {
                     </button>
                   ))}
                 </div>
-                <Button
-                  className="w-full gap-2"
-                  size="lg"
-                  onClick={compress}
-                  disabled={stage === "loading-ffmpeg"}
-                >
-                  {stage === "loading-ffmpeg" ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading engine… {loadProgress}%
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="h-4 w-4" />
-                      Compress Video
-                    </>
-                  )}
+                <Button className="w-full gap-2 bg-rose-600 hover:bg-rose-700" size="lg" onClick={compress}>
+                  <Zap className="h-4 w-4" /> Compress Video
                 </Button>
               </div>
             )}
 
-            {/* Compressing progress */}
+            {/* Compressing state */}
             {stage === "compressing" && (
-              <div className="bg-card border rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Loader2 className="h-6 w-6 text-rose-600 animate-spin" />
+              <div className="bg-card border rounded-2xl p-8 text-center">
+                <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Loader2 className="h-7 w-7 text-rose-600 animate-spin" />
                 </div>
-                <p className="font-semibold mb-1">Compressing…</p>
-                <p className="text-sm text-muted-foreground mb-4">This may take a moment for large files</p>
-                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="h-full bg-rose-500 rounded-full transition-all duration-300"
-                    style={{ width: `${compressProgress}%` }}
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">{compressProgress}%</p>
+                <p className="font-semibold text-lg mb-1">Compressing your video…</p>
+                <p className="text-sm text-muted-foreground">
+                  This may take a minute for large files. Please keep this tab open.
+                </p>
               </div>
             )}
 
             {/* Done */}
-            {stage === "done" && outputUrl && outputSize != null && (
+            {stage === "done" && outputUrl && (
               <div className="bg-card border rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center">
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-semibold">Compression complete</p>
-                    <p className="text-sm text-muted-foreground">Your video is ready to download</p>
+                    <p className="font-semibold">Done! Your video is ready</p>
+                    <p className="text-sm text-muted-foreground">Compressed server-side with FFmpeg</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-5">
-                  <div className="bg-muted/50 rounded-xl p-3 text-center">
+                  <div className="bg-muted/40 rounded-xl p-3 text-center">
                     <p className="text-xs text-muted-foreground mb-0.5">Original</p>
-                    <p className="font-bold text-sm">{formatBytes(file!.size)}</p>
+                    <p className="font-bold text-sm">{formatBytes(originalSize)}</p>
                   </div>
-                  <div className="bg-muted/50 rounded-xl p-3 text-center">
+                  <div className="bg-muted/40 rounded-xl p-3 text-center">
                     <p className="text-xs text-muted-foreground mb-0.5">Compressed</p>
-                    <p className="font-bold text-sm">{formatBytes(outputSize)}</p>
+                    <p className="font-bold text-sm">{formatBytes(compressedSize)}</p>
                   </div>
                   <div className="bg-green-50 rounded-xl p-3 text-center">
                     <p className="text-xs text-green-600 mb-0.5">Saved</p>
@@ -307,18 +250,12 @@ export default function VideoCompressPage() {
                 </div>
 
                 <div className="flex gap-3">
-                  <Button asChild className="flex-1 gap-2">
-                    <a
-                      href={outputUrl}
-                      download={`compressed_${file!.name.replace(/\.[^.]+$/, "")}.mp4`}
-                    >
-                      <Download className="h-4 w-4" />
-                      Download MP4
+                  <Button asChild className="flex-1 gap-2 bg-rose-600 hover:bg-rose-700">
+                    <a href={outputUrl} download={outputName}>
+                      <Download className="h-4 w-4" /> Download MP4
                     </a>
                   </Button>
-                  <Button variant="outline" onClick={reset}>
-                    Compress another
-                  </Button>
+                  <Button variant="outline" onClick={reset}>Compress another</Button>
                 </div>
               </div>
             )}
@@ -333,9 +270,8 @@ export default function VideoCompressPage() {
           </div>
         )}
 
-        {/* Privacy note */}
         <p className="mt-6 text-xs text-center text-muted-foreground">
-          🔒 100% in-browser — your video never leaves your device.
+          Videos are processed on the server and never stored permanently.
         </p>
       </div>
     </Layout>

@@ -5,11 +5,13 @@ import statsRouter from "./stats";
 import adminRouter from "./admin";
 import historyRouter from "./history";
 import usersRouter from "./users";
+import videoCompressRouter from "./video-compress";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(compressRouter);
+router.use(videoCompressRouter);
 router.use(statsRouter);
 router.use(adminRouter);
 router.use(historyRouter);
