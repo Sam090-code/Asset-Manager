@@ -62,16 +62,21 @@ export default function VideoCompressPage() {
     if (f) onFileSelect(f);
   }, [onFileSelect]);
 
+  const [downloadId, setDownloadId] = useState<string | null>(null);
+  const [downloadName, setDownloadName] = useState("compressed.mp4");
+
   const compress = useCallback(async () => {
     if (!file) return;
     setStage("compressing");
     setError(null);
+    setDownloadId(null);
 
     try {
       const form = new FormData();
       form.append("video", file);
       form.append("quality", quality);
 
+      // Step 1 — upload + compress; response is tiny JSON, not the video
       const res = await fetch(`${BASE}/api/compress-video`, {
         method: "POST",
         body: form,
@@ -82,10 +87,11 @@ export default function VideoCompressPage() {
         throw new Error((body as any).error ?? "Compression failed");
       }
 
-      const blob = await res.blob();
-      const size = Number(res.headers.get("X-Compressed-Size")) || blob.size;
-      setCompressedSize(size);
-      setOutputUrl(URL.createObjectURL(blob));
+      const { id, originalSize: orig, compressedSize: comp } = await res.json();
+      setOriginalSize(orig);
+      setCompressedSize(comp);
+      setDownloadId(id);
+      setDownloadName(`compressed_${file.name.replace(/\.[^.]+$/, "")}.mp4`);
       setStage("done");
     } catch (err: any) {
       setError(err.message ?? "Compression failed. Please try again.");
@@ -99,6 +105,7 @@ export default function VideoCompressPage() {
     setOutputUrl(null);
     setOriginalSize(null);
     setCompressedSize(null);
+    setDownloadId(null);
     setError(null);
     setVideoDuration(null);
     setStage("idle");
@@ -278,7 +285,7 @@ export default function VideoCompressPage() {
 
                 <div className="flex gap-3">
                   <Button asChild className="flex-1 gap-2 bg-rose-600 hover:bg-rose-700">
-                    <a href={outputUrl} download={outputName}>
+                    <a href={`${BASE}/api/compress-video/${downloadId}/download`} download={downloadName}>
                       <Download className="h-4 w-4" /> Download MP4
                     </a>
                   </Button>
