@@ -52,23 +52,22 @@ export default function VideoCompressPage() {
   const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current) return;
     setStage("loading-ffmpeg");
-    setLoadProgress(0);
+    setLoadProgress(10);
     try {
       const ffmpeg = new FFmpeg();
       ffmpeg.on("progress", ({ progress }) => {
         setCompressProgress(Math.round(progress * 100));
       });
+      setLoadProgress(30);
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${CDN}/ffmpeg-core.js`, "text/javascript", true, (p) => {
-          setLoadProgress(Math.round(p * 50));
-        }),
-        wasmURL: await toBlobURL(`${CDN}/ffmpeg-core.wasm`, "application/wasm", true, (p) => {
-          setLoadProgress(50 + Math.round(p * 50));
-        }),
+        coreURL: await toBlobURL(`${CDN}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${CDN}/ffmpeg-core.wasm`, "application/wasm"),
       });
+      setLoadProgress(100);
       ffmpegRef.current = ffmpeg;
       setStage("ready");
-    } catch {
+    } catch (e) {
+      console.error("FFmpeg load error:", e);
       setError("Failed to load video engine. Please check your connection and try again.");
       setStage("error");
     }
