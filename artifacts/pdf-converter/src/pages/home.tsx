@@ -12,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Trash2, RotateCcw, RotateCw, UploadCloud, FileDown, GripVertical,
   FlipHorizontal2, FlipVertical2, Loader2, Sun, Contrast, Droplets,
-  Type, Stamp, Hash, Maximize2,
+  Type, Stamp, Hash, Maximize2, ChevronLeft, ChevronRight, RefreshCw,
+  FileText,
 } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
@@ -35,6 +37,10 @@ type ImageItem = {
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+const PAGE_DIMS: Record<string, [number, number]> = {
+  A4: [595, 842], Letter: [612, 792], Legal: [612, 1008], A3: [842, 1190],
+};
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -44,48 +50,37 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+// ─── Sortable image row ──────────────────────────────────────────────────────
+
 function SortableImageRow({
-  item, index, selected, onSelect, onRemove, onRotate, onFlip,
+  item, index, selected, onSelect, onRemove, onRotate,
 }: {
-  item: ImageItem;
-  index: number;
-  selected: boolean;
-  onSelect: () => void;
-  onRemove: () => void;
-  onRotate: (dir: "left" | "right") => void;
-  onFlip: (axis: "h" | "v") => void;
+  item: ImageItem; index: number; selected: boolean;
+  onSelect: () => void; onRemove: () => void; onRotate: (dir: "left" | "right") => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      onClick={onSelect}
+      ref={setNodeRef} style={style} onClick={onSelect}
       className={`group flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-all ${
         selected ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-transparent hover:border-border hover:bg-muted/40"
       }`}
     >
-      <div
-        {...attributes}
-        {...listeners}
+      <div {...attributes} {...listeners}
         className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
-        onClick={(e) => e.stopPropagation()}
-      >
+        onClick={(e) => e.stopPropagation()}>
         <GripVertical className="h-3.5 w-3.5" />
       </div>
 
       <div className="relative flex-shrink-0 w-12 h-12 rounded overflow-hidden border bg-muted/30">
-        <img
-          src={item.dataUrl}
-          alt={`Page ${index + 1}`}
+        <img src={item.dataUrl} alt={`Page ${index + 1}`} draggable={false}
           className="w-full h-full object-contain"
           style={{
             transform: `rotate(${item.rotation}deg) scaleX(${item.flipH ? -1 : 1}) scaleY(${item.flipV ? -1 : 1})`,
             filter: `brightness(${item.brightness / 100}) contrast(${item.contrast / 100}) saturate(${item.saturation / 100})`,
           }}
-          draggable={false}
         />
         <div className="absolute bottom-0.5 left-0.5 text-[9px] font-bold bg-primary text-primary-foreground rounded px-1 leading-tight">
           {index + 1}
@@ -93,142 +88,256 @@ function SortableImageRow({
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-foreground truncate">Page {index + 1}</p>
-        {(item.brightness !== 100 || item.contrast !== 100 || item.saturation !== 100 || item.flipH || item.flipV) && (
+        <p className="text-xs font-medium truncate">Page {index + 1}</p>
+        {(item.brightness !== 100 || item.contrast !== 100 || item.saturation !== 100 || item.flipH || item.flipV || item.rotation !== 0) && (
           <p className="text-[10px] text-primary">Edited</p>
         )}
       </div>
 
       <div className="flex-shrink-0 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRotate("left")} title="Rotate left">
-          <RotateCcw className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRotate("right")} title="Rotate right">
-          <RotateCw className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={onRemove} title="Remove">
-          <Trash2 className="h-3 w-3" />
-        </Button>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRotate("left")} title="Rotate left"><RotateCcw className="h-3 w-3" /></Button>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRotate("right")} title="Rotate right"><RotateCw className="h-3 w-3" /></Button>
+        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={onRemove} title="Remove"><Trash2 className="h-3 w-3" /></Button>
       </div>
     </div>
   );
 }
 
-function ImageEditPanel({
-  item,
-  onChange,
-}: {
-  item: ImageItem;
-  onChange: (updates: Partial<ImageItem>) => void;
-}) {
+// ─── Per-image editing panel ─────────────────────────────────────────────────
+
+function ImageEditPanel({ item, onChange }: { item: ImageItem; onChange: (u: Partial<ImageItem>) => void }) {
   return (
     <div className="px-2 pb-3 space-y-3 border-t pt-3">
-      <p className="text-xs font-semibold text-foreground uppercase tracking-wide px-1">Image Adjustments</p>
-
+      <p className="text-xs font-semibold uppercase tracking-wide px-1">Adjustments — Page {}</p>
       <div className="grid grid-cols-2 gap-1.5">
-        <Button
-          variant={item.flipH ? "default" : "outline"}
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={() => onChange({ flipH: !item.flipH })}
-        >
+        <Button variant={item.flipH ? "default" : "outline"} size="sm" className="h-7 text-xs gap-1"
+          onClick={() => onChange({ flipH: !item.flipH })}>
           <FlipHorizontal2 className="h-3 w-3" /> Flip H
         </Button>
-        <Button
-          variant={item.flipV ? "default" : "outline"}
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={() => onChange({ flipV: !item.flipV })}
-        >
+        <Button variant={item.flipV ? "default" : "outline"} size="sm" className="h-7 text-xs gap-1"
+          onClick={() => onChange({ flipV: !item.flipV })}>
           <FlipVertical2 className="h-3 w-3" /> Flip V
         </Button>
       </div>
 
-      <div className="space-y-2.5">
-        <div className="space-y-1.5">
+      {[
+        { label: "Brightness", icon: Sun, key: "brightness" as const, min: 10, max: 200 },
+        { label: "Contrast",   icon: Contrast, key: "contrast" as const, min: 10, max: 200 },
+        { label: "Saturation", icon: Droplets, key: "saturation" as const, min: 0, max: 200 },
+      ].map(({ label, icon: Icon, key, min, max }) => (
+        <div key={key} className="space-y-1.5">
           <div className="flex items-center justify-between px-1">
-            <Label className="text-xs flex items-center gap-1"><Sun className="h-3 w-3" /> Brightness</Label>
-            <span className="text-xs text-muted-foreground tabular-nums">{item.brightness}%</span>
+            <Label className="text-xs flex items-center gap-1"><Icon className="h-3 w-3" />{label}</Label>
+            <span className="text-xs text-muted-foreground tabular-nums">{item[key]}%</span>
           </div>
-          <Slider
-            min={10} max={200} step={5}
-            value={[item.brightness]}
-            onValueChange={([v]) => onChange({ brightness: v })}
-            className="h-4"
-          />
+          <Slider min={min} max={max} step={5} value={[item[key]]}
+            onValueChange={([v]) => onChange({ [key]: v })} className="h-4" />
         </div>
+      ))}
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between px-1">
-            <Label className="text-xs flex items-center gap-1"><Contrast className="h-3 w-3" /> Contrast</Label>
-            <span className="text-xs text-muted-foreground tabular-nums">{item.contrast}%</span>
-          </div>
-          <Slider
-            min={10} max={200} step={5}
-            value={[item.contrast]}
-            onValueChange={([v]) => onChange({ contrast: v })}
-            className="h-4"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between px-1">
-            <Label className="text-xs flex items-center gap-1"><Droplets className="h-3 w-3" /> Saturation</Label>
-            <span className="text-xs text-muted-foreground tabular-nums">{item.saturation}%</span>
-          </div>
-          <Slider
-            min={0} max={200} step={5}
-            value={[item.saturation]}
-            onValueChange={([v]) => onChange({ saturation: v })}
-            className="h-4"
-          />
-        </div>
-      </div>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full h-7 text-xs text-muted-foreground"
-        onClick={() => onChange({ brightness: 100, contrast: 100, saturation: 100, flipH: false, flipV: false, rotation: 0 })}
-      >
+      <Button variant="ghost" size="sm" className="w-full h-7 text-xs text-muted-foreground"
+        onClick={() => onChange({ brightness: 100, contrast: 100, saturation: 100, flipH: false, flipV: false, rotation: 0 })}>
         Reset to original
       </Button>
     </div>
   );
 }
 
-function LivePreview({ images, settings, generating }: { images: ImageItem[]; settings: DocSettings; generating: boolean }) {
+// ─── Instant HTML preview (zero latency) ────────────────────────────────────
+
+function InstantPreview({
+  image, settings, pageIndex, total, onPrev, onNext,
+}: {
+  image: ImageItem | null; settings: DocSettings;
+  pageIndex: number; total: number;
+  onPrev: () => void; onNext: () => void;
+}) {
+  const [rawW, rawH] = settings.pageSize === "Custom"
+    ? [settings.customWidth, settings.customHeight]
+    : (PAGE_DIMS[settings.pageSize] ?? PAGE_DIMS.A4);
+  const [pw, ph] = settings.orientation === "landscape" ? [rawH, rawW] : [rawW, rawH];
+  const aspectRatio = pw / ph;
+
+  const HEADER_ZONE = settings.headerEnabled ? 28 : 0;
+  const FOOTER_ZONE = (settings.footerEnabled || settings.pageNumberPos !== "none") ? 24 : 0;
+  const { top: mt, right: mr, bottom: mb, left: ml } = settings.margins;
+
+  const borderWidths: Record<string, string> = { none: "0px", thin: "1px", medium: "3px", thick: "5px" };
+
+  const pageNumStr = (() => {
+    if (settings.pageNumberPos === "none" || total === 0) return "";
+    const n = pageIndex + 1;
+    if (settings.pageNumberFmt === "number") return `${n}`;
+    if (settings.pageNumberFmt === "page-n") return `Page ${n}`;
+    return `Page ${n} of ${total}`;
+  })();
+
+  const dateStr = new Date().toLocaleDateString();
+  const headerText = [settings.headerText, settings.headerShowDate ? dateStr : ""].filter(Boolean).join("   ");
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center overflow-auto p-6 bg-muted/20 min-h-0">
+      {total === 0 ? (
+        <div className="flex flex-col items-center gap-3 text-muted-foreground text-center">
+          <div className="w-16 h-20 border-2 border-dashed rounded flex items-center justify-center opacity-40">
+            <Maximize2 className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-medium">No images yet</p>
+          <p className="text-xs opacity-70">Add images in the left panel</p>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 w-full max-h-full">
+          {/* Paper */}
+          <div className="relative shadow-xl rounded-sm overflow-hidden flex-shrink-0"
+            style={{
+              aspectRatio: String(aspectRatio),
+              maxHeight: "calc(100% - 48px)",
+              maxWidth: "100%",
+              width: aspectRatio >= 1 ? "100%" : `calc((100vh - 200px) * ${aspectRatio})`,
+              backgroundColor: settings.backgroundColor,
+              border: `${borderWidths[settings.borderStyle] ?? "0px"} solid ${settings.borderColor}`,
+            }}
+          >
+            {/* Header */}
+            {settings.headerEnabled && (
+              <div className="absolute left-0 right-0 flex flex-col"
+                style={{ top: `${(mt / ph) * 100}%`, paddingLeft: `${(ml / pw) * 100}%`, paddingRight: `${(mr / pw) * 100}%` }}>
+                {headerText && (
+                  <p className="text-[9px] leading-tight truncate" style={{ color: "#595959" }}>{headerText}</p>
+                )}
+                <div className="mt-1" style={{ height: "0.4px", backgroundColor: "#ccc" }} />
+              </div>
+            )}
+
+            {/* Image area */}
+            {image && (
+              <div className="absolute inset-0 flex items-center justify-center overflow-hidden"
+                style={{
+                  top: `${((mt + HEADER_ZONE) / ph) * 100}%`,
+                  bottom: `${((mb + FOOTER_ZONE) / ph) * 100}%`,
+                  left: `${(ml / pw) * 100}%`,
+                  right: `${(mr / pw) * 100}%`,
+                }}
+              >
+                <img
+                  src={image.dataUrl}
+                  alt="Preview"
+                  draggable={false}
+                  className="max-w-full max-h-full object-contain"
+                  style={{
+                    transform: `rotate(${image.rotation}deg) scaleX(${image.flipH ? -1 : 1}) scaleY(${image.flipV ? -1 : 1})`,
+                    filter: `brightness(${image.brightness / 100}) contrast(${image.contrast / 100}) saturate(${image.saturation / 100})`,
+                    alignSelf: "center",
+                    marginLeft: settings.alignment === "left" ? 0 : settings.alignment === "right" ? "auto" : "auto",
+                    marginRight: settings.alignment === "right" ? 0 : settings.alignment === "left" ? "auto" : "auto",
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Watermark */}
+            {settings.watermarkEnabled && settings.watermarkText && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                <span
+                  className="font-bold whitespace-nowrap select-none"
+                  style={{
+                    fontSize: `${(settings.watermarkFontSize / ph) * 100}cqh`,
+                    opacity: settings.watermarkOpacity,
+                    transform: `rotate(${settings.watermarkRotation}deg)`,
+                    color: "#666",
+                    position: settings.watermarkPos !== "center" ? "absolute" : undefined,
+                    top: settings.watermarkPos.startsWith("top") ? `${((mt + 24) / ph) * 100}%` : undefined,
+                    bottom: settings.watermarkPos.startsWith("bottom") ? `${((mb + 24) / ph) * 100}%` : undefined,
+                    left: settings.watermarkPos.endsWith("left") ? `${((ml + 24) / pw) * 100}%` : undefined,
+                    right: settings.watermarkPos.endsWith("right") ? `${((mr + 24) / pw) * 100}%` : undefined,
+                    containerType: "size",
+                  } as React.CSSProperties}
+                >
+                  {settings.watermarkText}
+                </span>
+              </div>
+            )}
+
+            {/* Footer */}
+            {(settings.footerEnabled || settings.pageNumberPos !== "none") && (
+              <div className="absolute left-0 right-0 flex items-end"
+                style={{
+                  bottom: `${(mb / ph) * 100}%`,
+                  paddingLeft: `${(ml / pw) * 100}%`,
+                  paddingRight: `${(mr / pw) * 100}%`,
+                  height: `${(FOOTER_ZONE / ph) * 100}%`,
+                }}
+              >
+                <div className="w-full flex items-center justify-between">
+                  {settings.footerEnabled && settings.footerText ? (
+                    <p className="text-[9px] truncate" style={{ color: "#595959", maxWidth: "60%" }}>{settings.footerText}</p>
+                  ) : <span />}
+                  {pageNumStr && (
+                    <p className="text-[9px]" style={{ color: "#666",
+                      marginLeft: settings.pageNumberPos === "bottom-center" ? "auto" : undefined,
+                      marginRight: settings.pageNumberPos === "bottom-left" ? "auto" : undefined,
+                    }}>{pageNumStr}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Page navigation */}
+          {total > 1 && (
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={onPrev} disabled={pageIndex === 0}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-xs text-muted-foreground tabular-nums min-w-[80px] text-center">
+                Page {pageIndex + 1} of {total}
+              </span>
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={onNext} disabled={pageIndex === total - 1}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PDF output (iframe with actual generated PDF) ───────────────────────────
+
+function PdfOutput({ images, settings }: { images: ImageItem[]; settings: DocSettings }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [error, setError] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const prevUrl = useRef<string | null>(null);
 
-  const debouncedImages = useDebounce(images, 600);
-  const debouncedSettings = useDebounce(settings, 600);
+  const debouncedImages = useDebounce(images, 800);
+  const debouncedSettings = useDebounce(settings, 800);
+
+  // Mark pending immediately when raw values change
+  useEffect(() => {
+    if (images.length === 0) return;
+    setIsPending(true);
+  }, [images, settings]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    setIsPending(false);
     if (debouncedImages.length === 0) {
       if (prevUrl.current) { URL.revokeObjectURL(prevUrl.current); prevUrl.current = null; }
       setPreviewUrl(null);
-      setError(false);
+      setError(null);
       return;
     }
-
     let cancelled = false;
-    setError(false);
-
+    setIsGenerating(true);
+    setError(null);
     (async () => {
       try {
         const processed = await Promise.all(
           debouncedImages.map((img) =>
-            processImageItem({
-              dataUrl: img.dataUrl,
-              rotation: img.rotation,
-              flipH: img.flipH,
-              flipV: img.flipV,
-              brightness: img.brightness,
-              contrast: img.contrast,
-              saturation: img.saturation,
-            }).then((processedDataUrl) => ({ processedDataUrl }))
+            processImageItem({ dataUrl: img.dataUrl, rotation: img.rotation, flipH: img.flipH, flipV: img.flipV, brightness: img.brightness, contrast: img.contrast, saturation: img.saturation })
+              .then((processedDataUrl) => ({ processedDataUrl }))
           )
         );
         if (cancelled) return;
@@ -239,76 +348,75 @@ function LivePreview({ images, settings, generating }: { images: ImageItem[]; se
         if (prevUrl.current) URL.revokeObjectURL(prevUrl.current);
         prevUrl.current = url;
         setPreviewUrl(url);
-      } catch {
-        if (!cancelled) setError(true);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to generate PDF");
+      } finally {
+        if (!cancelled) setIsGenerating(false);
       }
     })();
-
     return () => { cancelled = true; };
   }, [debouncedImages, debouncedSettings]);
 
-  useEffect(() => {
-    return () => { if (prevUrl.current) URL.revokeObjectURL(prevUrl.current); };
-  }, []);
+  useEffect(() => () => { if (prevUrl.current) URL.revokeObjectURL(prevUrl.current); }, []);
 
   if (images.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 text-muted-foreground p-8">
-        <div className="w-16 h-20 border-2 border-dashed rounded-lg flex items-center justify-center">
-          <Maximize2 className="h-6 w-6 opacity-40" />
-        </div>
-        <div>
-          <p className="text-sm font-medium">No images yet</p>
-          <p className="text-xs mt-1 opacity-70">Add images in the left panel to see a live preview</p>
-        </div>
+        <FileText className="h-10 w-10 opacity-30" />
+        <p className="text-sm">Add images to generate a PDF preview</p>
       </div>
     );
   }
 
   return (
     <div className="flex-1 relative overflow-hidden">
-      {(generating) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm z-10">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-xs text-muted-foreground">Rendering preview…</p>
-          </div>
+      {/* Subtle top bar: pending (debounce waiting) vs generating */}
+      {(isPending || isGenerating) && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 z-20 overflow-hidden rounded-full">
+          <div className="h-full bg-primary animate-pulse w-full" />
         </div>
       )}
+
+      {/* Status badge */}
+      {(isPending || isGenerating) && (
+        <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm border rounded-full px-2.5 py-1 shadow-sm">
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          <span className="text-[11px] text-muted-foreground">{isPending ? "Waiting…" : "Rendering…"}</span>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <p className="text-sm text-destructive">Preview failed. Check your settings.</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-background/80">
+          <p className="text-sm text-destructive font-medium">PDF generation failed</p>
+          <p className="text-xs text-muted-foreground max-w-xs text-center">{error}</p>
         </div>
       )}
-      {previewUrl && (
+
+      {/* PDF iframe */}
+      {previewUrl ? (
         <iframe
           key={previewUrl}
-          src={previewUrl}
+          src={`${previewUrl}#toolbar=0&navpanes=0&view=FitH`}
           className="w-full h-full border-0"
-          title="PDF Preview"
+          title="PDF Output"
         />
-      )}
-      {!previewUrl && !error && (
+      ) : !error && !isGenerating ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-xs text-muted-foreground">Generating preview…</p>
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-xs">Generating PDF…</p>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function SettingsSidebar({
-  settings,
-  onChange,
-}: {
-  settings: DocSettings;
-  onChange: (updates: Partial<DocSettings>) => void;
-}) {
-  const m = settings.margins;
+// ─── Settings sidebar ────────────────────────────────────────────────────────
 
+function SettingsSidebar({ settings, onChange }: { settings: DocSettings; onChange: (u: Partial<DocSettings>) => void }) {
+  const m = settings.margins;
   return (
     <ScrollArea className="h-full">
       <div className="p-3">
@@ -316,7 +424,7 @@ function SettingsSidebar({
 
           <AccordionItem value="page" className="border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-semibold py-2.5 hover:no-underline">
-              <span className="flex items-center gap-2"><Maximize2 className="h-3.5 w-3.5" /> Page</span>
+              <span className="flex items-center gap-2"><Maximize2 className="h-3.5 w-3.5" />Page</span>
             </AccordionTrigger>
             <AccordionContent className="pb-3 space-y-3">
               <div className="space-y-1.5">
@@ -332,58 +440,31 @@ function SettingsSidebar({
                   </SelectContent>
                 </Select>
               </div>
-
               {settings.pageSize === "Custom" && (
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Width (pt)</Label>
-                    <Input
-                      type="number" className="h-8 text-xs"
-                      value={settings.customWidth}
-                      onChange={(e) => onChange({ customWidth: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Height (pt)</Label>
-                    <Input
-                      type="number" className="h-8 text-xs"
-                      value={settings.customHeight}
-                      onChange={(e) => onChange({ customHeight: Number(e.target.value) })}
-                    />
-                  </div>
+                  <div className="space-y-1"><Label className="text-xs">Width (pt)</Label>
+                    <Input type="number" className="h-8 text-xs" value={settings.customWidth}
+                      onChange={(e) => onChange({ customWidth: Number(e.target.value) })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Height (pt)</Label>
+                    <Input type="number" className="h-8 text-xs" value={settings.customHeight}
+                      onChange={(e) => onChange({ customHeight: Number(e.target.value) })} /></div>
                 </div>
               )}
-
               <div className="space-y-1.5">
                 <Label className="text-xs">Orientation</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["portrait", "landscape"] as const).map((o) => (
-                    <Button
-                      key={o}
-                      variant={settings.orientation === o ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 text-xs capitalize"
-                      onClick={() => onChange({ orientation: o })}
-                    >
-                      {o}
-                    </Button>
+                    <Button key={o} variant={settings.orientation === o ? "default" : "outline"} size="sm"
+                      className="h-8 text-xs capitalize" onClick={() => onChange({ orientation: o })}>{o}</Button>
                   ))}
                 </div>
               </div>
-
               <div className="space-y-1.5">
                 <Label className="text-xs">Image Alignment</Label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {(["left", "center", "right"] as const).map((a) => (
-                    <Button
-                      key={a}
-                      variant={settings.alignment === a ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs capitalize"
-                      onClick={() => onChange({ alignment: a })}
-                    >
-                      {a}
-                    </Button>
+                    <Button key={a} variant={settings.alignment === a ? "default" : "outline"} size="sm"
+                      className="h-7 text-xs capitalize" onClick={() => onChange({ alignment: a })}>{a}</Button>
                   ))}
                 </div>
               </div>
@@ -392,37 +473,28 @@ function SettingsSidebar({
 
           <AccordionItem value="layout" className="border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-semibold py-2.5 hover:no-underline">
-              <span className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> Layout</span>
+              <span className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" />Layout</span>
             </AccordionTrigger>
             <AccordionContent className="pb-3 space-y-3">
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Margins (pt)</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {([
-                    ["Top", "top"], ["Right", "right"], ["Bottom", "bottom"], ["Left", "left"],
-                  ] as const).map(([label, key]) => (
-                    <div key={key} className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">{label}</Label>
-                      <Input
-                        type="number" min={0} max={200} className="h-7 text-xs"
-                        value={m[key]}
-                        onChange={(e) => onChange({ margins: { ...m, [key]: Number(e.target.value) } })}
-                      />
+                  {(["top", "right", "bottom", "left"] as const).map((k) => (
+                    <div key={k} className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground capitalize">{k}</Label>
+                      <Input type="number" min={0} max={200} className="h-7 text-xs" value={m[k]}
+                        onChange={(e) => onChange({ margins: { ...m, [k]: Number(e.target.value) } })} />
                     </div>
                   ))}
                 </div>
               </div>
-
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Page Spacing (pt)</Label>
                   <span className="text-xs text-muted-foreground tabular-nums">{settings.spacing}</span>
                 </div>
-                <Slider
-                  min={0} max={100} step={2}
-                  value={[settings.spacing]}
-                  onValueChange={([v]) => onChange({ spacing: v })}
-                />
+                <Slider min={0} max={100} step={2} value={[settings.spacing]}
+                  onValueChange={([v]) => onChange({ spacing: v })} />
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -438,21 +510,13 @@ function SettingsSidebar({
               <div className="space-y-1.5">
                 <Label className="text-xs">Background Color</Label>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={settings.backgroundColor}
+                  <input type="color" value={settings.backgroundColor}
                     onChange={(e) => onChange({ backgroundColor: e.target.value })}
-                    className="h-8 w-10 rounded border cursor-pointer p-0.5 bg-transparent"
-                  />
-                  <Input
-                    className="h-8 text-xs font-mono flex-1"
-                    value={settings.backgroundColor}
-                    onChange={(e) => onChange({ backgroundColor: e.target.value })}
-                    maxLength={7}
-                  />
+                    className="h-8 w-10 rounded border cursor-pointer p-0.5 bg-transparent" />
+                  <Input className="h-8 text-xs font-mono flex-1" value={settings.backgroundColor} maxLength={7}
+                    onChange={(e) => onChange({ backgroundColor: e.target.value })} />
                 </div>
               </div>
-
               <div className="space-y-1.5">
                 <Label className="text-xs">Border Style</Label>
                 <Select value={settings.borderStyle} onValueChange={(v: any) => onChange({ borderStyle: v })}>
@@ -465,23 +529,15 @@ function SettingsSidebar({
                   </SelectContent>
                 </Select>
               </div>
-
               {settings.borderStyle !== "none" && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Border Color</Label>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={settings.borderColor}
+                    <input type="color" value={settings.borderColor}
                       onChange={(e) => onChange({ borderColor: e.target.value })}
-                      className="h-8 w-10 rounded border cursor-pointer p-0.5 bg-transparent"
-                    />
-                    <Input
-                      className="h-8 text-xs font-mono flex-1"
-                      value={settings.borderColor}
-                      onChange={(e) => onChange({ borderColor: e.target.value })}
-                      maxLength={7}
-                    />
+                      className="h-8 w-10 rounded border cursor-pointer p-0.5 bg-transparent" />
+                    <Input className="h-8 text-xs font-mono flex-1" value={settings.borderColor} maxLength={7}
+                      onChange={(e) => onChange({ borderColor: e.target.value })} />
                   </div>
                 </div>
               )}
@@ -490,65 +546,44 @@ function SettingsSidebar({
 
           <AccordionItem value="header" className="border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-semibold py-2.5 hover:no-underline">
-              <span className="flex items-center gap-2"><Type className="h-3.5 w-3.5" /> Header</span>
+              <span className="flex items-center gap-2"><Type className="h-3.5 w-3.5" />Header</span>
             </AccordionTrigger>
             <AccordionContent className="pb-3 space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Enable Header</Label>
-                <Switch
-                  checked={settings.headerEnabled}
-                  onCheckedChange={(v) => onChange({ headerEnabled: v })}
-                />
+                <Switch checked={settings.headerEnabled} onCheckedChange={(v) => onChange({ headerEnabled: v })} />
               </div>
-              {settings.headerEnabled && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Header Text</Label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="e.g. My Document"
-                      value={settings.headerText}
-                      onChange={(e) => onChange({ headerText: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Show Date</Label>
-                    <Switch
-                      checked={settings.headerShowDate}
-                      onCheckedChange={(v) => onChange({ headerShowDate: v })}
-                    />
-                  </div>
-                </>
-              )}
+              {settings.headerEnabled && (<>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Header Text</Label>
+                  <Input className="h-8 text-xs" placeholder="e.g. My Document" value={settings.headerText}
+                    onChange={(e) => onChange({ headerText: e.target.value })} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Show Date</Label>
+                  <Switch checked={settings.headerShowDate} onCheckedChange={(v) => onChange({ headerShowDate: v })} />
+                </div>
+              </>)}
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="footer" className="border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-semibold py-2.5 hover:no-underline">
-              <span className="flex items-center gap-2"><Type className="h-3.5 w-3.5 rotate-180" /> Footer & Page Numbers</span>
+              <span className="flex items-center gap-2"><Type className="h-3.5 w-3.5 rotate-180" />Footer & Page Numbers</span>
             </AccordionTrigger>
             <AccordionContent className="pb-3 space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Enable Footer</Label>
-                <Switch
-                  checked={settings.footerEnabled}
-                  onCheckedChange={(v) => onChange({ footerEnabled: v })}
-                />
+                <Switch checked={settings.footerEnabled} onCheckedChange={(v) => onChange({ footerEnabled: v })} />
               </div>
               {settings.footerEnabled && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Footer Text</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    placeholder="e.g. Confidential"
-                    value={settings.footerText}
-                    onChange={(e) => onChange({ footerText: e.target.value })}
-                  />
+                  <Input className="h-8 text-xs" placeholder="e.g. Confidential" value={settings.footerText}
+                    onChange={(e) => onChange({ footerText: e.target.value })} />
                 </div>
               )}
-
               <Separator />
-
               <div className="space-y-1.5">
                 <Label className="text-xs">Page Numbers</Label>
                 <Select value={settings.pageNumberPos} onValueChange={(v: any) => onChange({ pageNumberPos: v })}>
@@ -561,7 +596,6 @@ function SettingsSidebar({
                   </SelectContent>
                 </Select>
               </div>
-
               {settings.pageNumberPos !== "none" && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Number Format</Label>
@@ -580,80 +614,54 @@ function SettingsSidebar({
 
           <AccordionItem value="watermark" className="border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-semibold py-2.5 hover:no-underline">
-              <span className="flex items-center gap-2"><Stamp className="h-3.5 w-3.5" /> Watermark</span>
+              <span className="flex items-center gap-2"><Stamp className="h-3.5 w-3.5" />Watermark</span>
             </AccordionTrigger>
             <AccordionContent className="pb-3 space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Enable Watermark</Label>
-                <Switch
-                  checked={settings.watermarkEnabled}
-                  onCheckedChange={(v) => onChange({ watermarkEnabled: v })}
-                />
+                <Switch checked={settings.watermarkEnabled} onCheckedChange={(v) => onChange({ watermarkEnabled: v })} />
               </div>
-
-              {settings.watermarkEnabled && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Watermark Text</Label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="e.g. CONFIDENTIAL"
-                      value={settings.watermarkText}
-                      onChange={(e) => onChange({ watermarkText: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Position</Label>
-                    <Select value={settings.watermarkPos} onValueChange={(v: any) => onChange({ watermarkPos: v })}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="center">Center</SelectItem>
-                        <SelectItem value="top-left">Top Left</SelectItem>
-                        <SelectItem value="top-right">Top Right</SelectItem>
-                        <SelectItem value="bottom-left">Bottom Left</SelectItem>
-                        <SelectItem value="bottom-right">Bottom Right</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
+              {settings.watermarkEnabled && (<>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Watermark Text</Label>
+                  <Input className="h-8 text-xs" placeholder="e.g. CONFIDENTIAL" value={settings.watermarkText}
+                    onChange={(e) => onChange({ watermarkText: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Position</Label>
+                  <Select value={settings.watermarkPos} onValueChange={(v: any) => onChange({ watermarkPos: v })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="center">Center</SelectItem>
+                      <SelectItem value="top-left">Top Left</SelectItem>
+                      <SelectItem value="top-right">Top Right</SelectItem>
+                      <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                      <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {[
+                  { label: "Font Size", key: "watermarkFontSize" as const, min: 12, max: 120, unit: "pt" },
+                  { label: "Rotation",  key: "watermarkRotation" as const, min: -90, max: 90, unit: "°" },
+                ].map(({ label, key, min, max, unit }) => (
+                  <div key={key} className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Font Size</Label>
-                      <span className="text-xs text-muted-foreground tabular-nums">{settings.watermarkFontSize}pt</span>
+                      <Label className="text-xs">{label}</Label>
+                      <span className="text-xs text-muted-foreground tabular-nums">{settings[key]}{unit}</span>
                     </div>
-                    <Slider
-                      min={12} max={120} step={2}
-                      value={[settings.watermarkFontSize]}
-                      onValueChange={([v]) => onChange({ watermarkFontSize: v })}
-                    />
+                    <Slider min={min} max={max} step={unit === "pt" ? 2 : 5} value={[settings[key]]}
+                      onValueChange={([v]) => onChange({ [key]: v })} />
                   </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Rotation</Label>
-                      <span className="text-xs text-muted-foreground tabular-nums">{settings.watermarkRotation}°</span>
-                    </div>
-                    <Slider
-                      min={-90} max={90} step={5}
-                      value={[settings.watermarkRotation]}
-                      onValueChange={([v]) => onChange({ watermarkRotation: v })}
-                    />
+                ))}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Opacity</Label>
+                    <span className="text-xs text-muted-foreground tabular-nums">{Math.round(settings.watermarkOpacity * 100)}%</span>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Opacity</Label>
-                      <span className="text-xs text-muted-foreground tabular-nums">{Math.round(settings.watermarkOpacity * 100)}%</span>
-                    </div>
-                    <Slider
-                      min={0.05} max={0.8} step={0.05}
-                      value={[settings.watermarkOpacity]}
-                      onValueChange={([v]) => onChange({ watermarkOpacity: v })}
-                    />
-                  </div>
-                </>
-              )}
+                  <Slider min={0.05} max={0.8} step={0.05} value={[settings.watermarkOpacity]}
+                    onValueChange={([v]) => onChange({ watermarkOpacity: v })} />
+                </div>
+              </>)}
             </AccordionContent>
           </AccordionItem>
 
@@ -663,12 +671,14 @@ function SettingsSidebar({
   );
 }
 
+// ─── Main page ───────────────────────────────────────────────────────────────
+
 export default function Home() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [settings, setSettings] = useState<DocSettings>({ ...DEFAULT_SETTINGS });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isPreviewGenerating, setIsPreviewGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -681,14 +691,21 @@ export default function Home() {
   );
 
   const selectedImage = images.find((i) => i.id === selectedId) ?? null;
+  const previewImage = images[previewPageIndex] ?? null;
+
+  // Sync selectedId → preview page
+  useEffect(() => {
+    const idx = images.findIndex((i) => i.id === selectedId);
+    if (idx !== -1) setPreviewPageIndex(idx);
+  }, [selectedId, images]);
 
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
       setImages((items) => {
-        const oldIndex = items.findIndex((i) => i.id === active.id);
-        const newIndex = items.findIndex((i) => i.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
+        const oi = items.findIndex((i) => i.id === active.id);
+        const ni = items.findIndex((i) => i.id === over.id);
+        return arrayMove(items, oi, ni);
       });
     }
   };
@@ -697,30 +714,18 @@ export default function Home() {
     const newImages: ImageItem[] = [];
     for (const file of Array.from(files)) {
       if (!file.type.match("image/.*")) continue;
-      const reader = new FileReader();
       const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
         reader.onload = (e) => resolve(e.target?.result as string);
         reader.readAsDataURL(file);
       });
-      newImages.push({
-        id: Math.random().toString(36).substring(7),
-        dataUrl,
-        rotation: 0,
-        flipH: false,
-        flipV: false,
-        brightness: 100,
-        contrast: 100,
-        saturation: 100,
-      });
+      newImages.push({ id: Math.random().toString(36).substring(7), dataUrl, rotation: 0, flipH: false, flipV: false, brightness: 100, contrast: 100, saturation: 100 });
     }
     if (newImages.length > 0) {
-      setImages((prev) => {
-        const updated = [...prev, ...newImages];
-        if (!selectedId) setSelectedId(newImages[0].id);
-        return updated;
-      });
+      setImages((prev) => [...prev, ...newImages]);
+      setSelectedId((prev) => prev ?? newImages[0].id);
     }
-  }, [selectedId]);
+  }, []);
 
   const updateImage = useCallback((id: string, updates: Partial<ImageItem>) => {
     setImages((prev) => prev.map((img) => img.id === id ? { ...img, ...updates } : img));
@@ -729,65 +734,42 @@ export default function Home() {
   const removeImage = useCallback((id: string) => {
     setImages((prev) => {
       const filtered = prev.filter((i) => i.id !== id);
-      if (selectedId === id) {
-        setSelectedId(filtered.length > 0 ? filtered[0].id : null);
-      }
+      setSelectedId((sel) => sel === id ? (filtered[0]?.id ?? null) : sel);
       return filtered;
     });
-  }, [selectedId]);
+  }, []);
 
   const handleDownload = async () => {
     if (images.length === 0) return;
-    setIsGenerating(true);
+    setIsDownloading(true);
     try {
       const processed = await Promise.all(
         images.map((img) =>
-          processImageItem({
-            dataUrl: img.dataUrl,
-            rotation: img.rotation,
-            flipH: img.flipH,
-            flipV: img.flipV,
-            brightness: img.brightness,
-            contrast: img.contrast,
-            saturation: img.saturation,
-          }).then((processedDataUrl) => ({ processedDataUrl }))
+          processImageItem({ dataUrl: img.dataUrl, rotation: img.rotation, flipH: img.flipH, flipV: img.flipV, brightness: img.brightness, contrast: img.contrast, saturation: img.saturation })
+            .then((processedDataUrl) => ({ processedDataUrl }))
         )
       );
       const bytes = await generatePdf(processed, settings);
       const fileName = `DocuFlow_${Date.now()}.pdf`;
       const blob = new Blob([bytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const a = document.createElement("a"); a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast({ title: "PDF Downloaded", description: `${fileName} saved to your device.` });
-
+      toast({ title: "PDF Downloaded", description: `${images.length} page${images.length !== 1 ? "s" : ""} saved.` });
       fetch(`${BASE}/api/stats/record-pdf`, { method: "POST" })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["/stats"] }))
-        .catch(() => {});
-
+        .then(() => queryClient.invalidateQueries({ queryKey: ["/stats"] })).catch(() => {});
       if (isSignedIn) {
         fetch(`${BASE}/api/history`, {
-          method: "POST",
-          credentials: "include",
+          method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "pdf",
-            fileName,
-            pageCount: images.length,
-            userEmail: user?.primaryEmailAddress?.emailAddress,
-          }),
+          body: JSON.stringify({ type: "pdf", fileName, pageCount: images.length, userEmail: user?.primaryEmailAddress?.emailAddress }),
         }).catch(() => {});
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast({ title: "Error", description: "Failed to generate PDF.", variant: "destructive" });
     } finally {
-      setIsGenerating(false);
+      setIsDownloading(false);
     }
   };
 
@@ -795,61 +777,41 @@ export default function Home() {
     <Layout>
       <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden">
 
-        {/* LEFT PANEL — Image List */}
+        {/* ── LEFT: Image list ─────────────────────────────────────────────── */}
         <div className="w-[260px] flex flex-col border-r bg-background flex-shrink-0">
           <div className="flex items-center justify-between px-3 py-2 border-b">
             <div>
-              <p className="text-xs font-semibold text-foreground">Images</p>
+              <p className="text-xs font-semibold">Images</p>
               <p className="text-[10px] text-muted-foreground">{images.length} page{images.length !== 1 ? "s" : ""}</p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1"
-              onClick={() => fileInputRef.current?.click()}
-            >
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => fileInputRef.current?.click()}>
               <UploadCloud className="h-3 w-3" /> Add
             </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => { if (e.target.files) processFiles(e.target.files); e.target.value = ""; }}
-            />
+            <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden"
+              onChange={(e) => { if (e.target.files) processFiles(e.target.files); e.target.value = ""; }} />
           </div>
 
           <ScrollArea className="flex-1">
             {images.length === 0 ? (
-              <div
-                className="m-3 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:bg-muted/30 transition-colors"
+              <div className="m-3 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:bg-muted/30 transition-colors"
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}
-              >
+                onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}>
                 <UploadCloud className="h-7 w-7 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-xs font-medium">Click or drop images</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">JPG, PNG, WEBP</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">JPG · PNG · WEBP</p>
               </div>
             ) : (
-              <div
-                className="p-2 space-y-0.5"
+              <div className="p-2 space-y-0.5"
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}
-              >
+                onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={images.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                     {images.map((item, index) => (
-                      <SortableImageRow
-                        key={item.id}
-                        item={item}
-                        index={index}
-                        selected={selectedId === item.id}
+                      <SortableImageRow key={item.id} item={item} index={index} selected={selectedId === item.id}
                         onSelect={() => setSelectedId(item.id)}
                         onRemove={() => removeImage(item.id)}
                         onRotate={(dir) => updateImage(item.id, { rotation: item.rotation + (dir === "left" ? -90 : 90) })}
-                        onFlip={(axis) => updateImage(item.id, axis === "h" ? { flipH: !item.flipH } : { flipV: !item.flipV })}
                       />
                     ))}
                   </SortableContext>
@@ -860,61 +822,74 @@ export default function Home() {
 
           {selectedImage && (
             <div className="border-t">
-              <ImageEditPanel
-                item={selectedImage}
-                onChange={(updates) => updateImage(selectedImage.id, updates)}
-              />
+              <ImageEditPanel item={selectedImage} onChange={(u) => updateImage(selectedImage.id, u)} />
             </div>
           )}
 
           <div className="border-t p-2">
-            <Button
-              className="w-full gap-2"
-              disabled={images.length === 0 || isGenerating}
-              onClick={handleDownload}
-            >
-              {isGenerating ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-              ) : (
-                <><FileDown className="h-4 w-4" /> Download PDF</>
-              )}
+            <Button className="w-full gap-2" disabled={images.length === 0 || isDownloading} onClick={handleDownload}>
+              {isDownloading ? <><Loader2 className="h-4 w-4 animate-spin" />Generating…</> : <><FileDown className="h-4 w-4" />Download PDF</>}
             </Button>
           </div>
         </div>
 
-        {/* CENTER PANEL — Live Preview */}
-        <div className="flex-1 flex flex-col bg-muted/20 min-w-0">
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-background">
-            <p className="text-xs font-semibold text-foreground">Live Preview</p>
-            {images.length > 0 && (
-              <p className="text-[10px] text-muted-foreground">Updates automatically · {images.length} page{images.length !== 1 ? "s" : ""}</p>
-            )}
-          </div>
-          <LivePreview
-            images={images}
-            settings={settings}
-            generating={isPreviewGenerating}
-          />
+        {/* ── CENTER: Preview tabs ─────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <Tabs defaultValue="instant" className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex items-center justify-between border-b bg-background px-3 flex-shrink-0">
+              <TabsList className="h-9 bg-transparent gap-0 p-0">
+                <TabsTrigger value="instant"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 h-9 text-xs font-medium">
+                  Live Preview
+                </TabsTrigger>
+                <TabsTrigger value="pdf"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 h-9 text-xs font-medium gap-1.5">
+                  PDF Output
+                  {images.length > 0 && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              {images.length > 0 && (
+                <p className="text-[10px] text-muted-foreground">{images.length} page{images.length !== 1 ? "s" : ""}</p>
+              )}
+            </div>
+
+            <TabsContent value="instant" className="flex-1 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col">
+              <InstantPreview
+                image={previewImage}
+                settings={settings}
+                pageIndex={previewPageIndex}
+                total={images.length}
+                onPrev={() => {
+                  const idx = Math.max(0, previewPageIndex - 1);
+                  setPreviewPageIndex(idx);
+                  setSelectedId(images[idx]?.id ?? null);
+                }}
+                onNext={() => {
+                  const idx = Math.min(images.length - 1, previewPageIndex + 1);
+                  setPreviewPageIndex(idx);
+                  setSelectedId(images[idx]?.id ?? null);
+                }}
+              />
+            </TabsContent>
+
+            <TabsContent value="pdf" className="flex-1 overflow-hidden m-0 data-[state=active]:flex data-[state=active]:flex-col">
+              <PdfOutput images={images} settings={settings} />
+            </TabsContent>
+          </Tabs>
         </div>
 
-        {/* RIGHT PANEL — Settings */}
+        {/* ── RIGHT: Settings ──────────────────────────────────────────────── */}
         <div className="w-[300px] flex flex-col border-l bg-background flex-shrink-0">
           <div className="px-3 py-2 border-b">
-            <p className="text-xs font-semibold text-foreground">Document Settings</p>
+            <p className="text-xs font-semibold">Document Settings</p>
           </div>
           <div className="flex-1 overflow-hidden">
-            <SettingsSidebar
-              settings={settings}
-              onChange={(updates) => setSettings((prev) => ({ ...prev, ...updates }))}
-            />
+            <SettingsSidebar settings={settings} onChange={(u) => setSettings((p) => ({ ...p, ...u }))} />
           </div>
           <div className="border-t p-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-xs"
-              onClick={() => setSettings({ ...DEFAULT_SETTINGS })}
-            >
+            <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setSettings({ ...DEFAULT_SETTINGS })}>
               Reset all settings
             </Button>
           </div>
