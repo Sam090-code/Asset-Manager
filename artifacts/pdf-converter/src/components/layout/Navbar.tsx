@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { FileUp, FileText, Info, ShieldCheck, LogIn, LogOut, User, History, Sparkles, Film, Zap, FileArchive, ArrowRight } from "lucide-react";
+import { FileUp, FileText, Info, ShieldCheck, LogIn, LogOut, User, History, Sparkles, Film, Zap, FileArchive, ArrowRight, Merge } from "lucide-react";
 import { useClerk, useUser, Show } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {

@@ -13,6 +13,7 @@ import Compress from "@/pages/compress";
 import About from "@/pages/about";
 import HistoryPage from "@/pages/history";
 import VideoCompressPage from "@/pages/video-compress";
+import PdfMergePage from "@/pages/pdf-merge";
 import AdminLogin from "@/pages/admin/login";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
