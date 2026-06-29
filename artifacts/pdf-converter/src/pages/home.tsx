@@ -303,112 +303,189 @@ function InstantPreview({
   );
 }
 
-// ─── PDF output (iframe with actual generated PDF) ───────────────────────────
+// ─── PDF output — canvas-rendered page viewer (no iframe/blob needed) ────────
 
 function PdfOutput({ images, settings }: { images: ImageItem[]; settings: DocSettings }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [processedUrls, setProcessedUrls] = useState<string[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const prevUrl = useRef<string | null>(null);
 
-  const debouncedImages = useDebounce(images, 800);
-  const debouncedSettings = useDebounce(settings, 800);
+  const debouncedImages = useDebounce(images, 700);
 
-  // Mark pending immediately when raw values change
+  // Mark pending immediately when raw images change
   useEffect(() => {
-    if (images.length === 0) return;
+    if (images.length === 0) { setProcessedUrls([]); return; }
     setIsPending(true);
-  }, [images, settings]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [images]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Process images after debounce settles
   useEffect(() => {
     setIsPending(false);
-    if (debouncedImages.length === 0) {
-      if (prevUrl.current) { URL.revokeObjectURL(prevUrl.current); prevUrl.current = null; }
-      setPreviewUrl(null);
-      setError(null);
-      return;
-    }
+    if (debouncedImages.length === 0) { setProcessedUrls([]); return; }
     let cancelled = false;
-    setIsGenerating(true);
-    setError(null);
+    setIsProcessing(true);
     (async () => {
       try {
-        const processed = await Promise.all(
+        const urls = await Promise.all(
           debouncedImages.map((img) =>
-            processImageItem({ dataUrl: img.dataUrl, rotation: img.rotation, flipH: img.flipH, flipV: img.flipV, brightness: img.brightness, contrast: img.contrast, saturation: img.saturation })
-              .then((processedDataUrl) => ({ processedDataUrl }))
+            processImageItem({
+              dataUrl: img.dataUrl, rotation: img.rotation,
+              flipH: img.flipH, flipV: img.flipV,
+              brightness: img.brightness, contrast: img.contrast, saturation: img.saturation,
+            })
           )
         );
-        if (cancelled) return;
-        const bytes = await generatePdf(processed, debouncedSettings);
-        if (cancelled) return;
-        const blob = new Blob([bytes], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        if (prevUrl.current) URL.revokeObjectURL(prevUrl.current);
-        prevUrl.current = url;
-        setPreviewUrl(url);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Failed to generate PDF");
+        if (!cancelled) setProcessedUrls(urls);
       } finally {
-        if (!cancelled) setIsGenerating(false);
+        if (!cancelled) setIsProcessing(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [debouncedImages, debouncedSettings]);
+  }, [debouncedImages]);
 
-  useEffect(() => () => { if (prevUrl.current) URL.revokeObjectURL(prevUrl.current); }, []);
+  const [rawW, rawH] = settings.pageSize === "Custom"
+    ? [settings.customWidth, settings.customHeight]
+    : (PAGE_DIMS[settings.pageSize] ?? PAGE_DIMS.A4);
+  const [pw, ph] = settings.orientation === "landscape" ? [rawH, rawW] : [rawW, rawH];
+  const aspectRatio = pw / ph;
+
+  const HEADER_ZONE = settings.headerEnabled ? 28 : 0;
+  const FOOTER_ZONE = (settings.footerEnabled || settings.pageNumberPos !== "none") ? 24 : 0;
+  const { top: mt, right: mr, bottom: mb, left: ml } = settings.margins;
+  const borderWidths: Record<string, string> = { none: "0px", thin: "1px", medium: "3px", thick: "5px" };
+  const dateStr = new Date().toLocaleDateString();
+  const headerText = [settings.headerText, settings.headerShowDate ? dateStr : ""].filter(Boolean).join("   ");
+  const total = images.length;
 
   if (images.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 text-muted-foreground p-8">
         <FileText className="h-10 w-10 opacity-30" />
-        <p className="text-sm">Add images to generate a PDF preview</p>
+        <p className="text-sm">Add images to see the processed PDF pages</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 relative overflow-hidden">
-      {/* Subtle top bar: pending (debounce waiting) vs generating */}
-      {(isPending || isGenerating) && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 z-20 overflow-hidden rounded-full">
-          <div className="h-full bg-primary animate-pulse w-full" />
-        </div>
-      )}
-
-      {/* Status badge */}
-      {(isPending || isGenerating) && (
-        <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm border rounded-full px-2.5 py-1 shadow-sm">
-          <Loader2 className="h-3 w-3 animate-spin text-primary" />
-          <span className="text-[11px] text-muted-foreground">{isPending ? "Waiting…" : "Rendering…"}</span>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-background/80">
-          <p className="text-sm text-destructive font-medium">PDF generation failed</p>
-          <p className="text-xs text-muted-foreground max-w-xs text-center">{error}</p>
-        </div>
-      )}
-
-      {/* PDF iframe */}
-      {previewUrl ? (
-        <iframe
-          key={previewUrl}
-          src={`${previewUrl}#toolbar=0&navpanes=0&view=FitH`}
-          className="w-full h-full border-0"
-          title="PDF Output"
-        />
-      ) : !error && !isGenerating ? (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <p className="text-xs">Generating PDF…</p>
+    <div className="flex-1 relative overflow-hidden flex flex-col">
+      {/* Top status bar */}
+      {(isPending || isProcessing) && (
+        <>
+          <div className="absolute top-0 left-0 right-0 h-0.5 z-20">
+            <div className="h-full bg-primary/70 animate-pulse w-full" />
           </div>
-        </div>
-      ) : null}
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm border rounded-full px-2.5 py-1 shadow-sm">
+            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+            <span className="text-[11px] text-muted-foreground">{isPending ? "Waiting…" : "Processing…"}</span>
+          </div>
+        </>
+      )}
+
+      {/* Scrollable page viewer */}
+      <div className="flex-1 overflow-y-auto bg-muted/20 py-6 px-4 space-y-6">
+        {(processedUrls.length > 0 ? processedUrls : new Array(images.length).fill(null)).map((url, i) => {
+          const pageNumStr = (() => {
+            if (settings.pageNumberPos === "none") return "";
+            const n = i + 1;
+            if (settings.pageNumberFmt === "number") return `${n}`;
+            if (settings.pageNumberFmt === "page-n") return `Page ${n}`;
+            return `Page ${n} of ${total}`;
+          })();
+
+          return (
+            <div key={i} className="mx-auto flex flex-col items-center gap-1.5" style={{ maxWidth: "480px" }}>
+              {/* Page label */}
+              <p className="text-[10px] text-muted-foreground">Page {i + 1}</p>
+
+              {/* Paper */}
+              <div
+                className="relative w-full shadow-xl rounded-sm overflow-hidden flex-shrink-0"
+                style={{
+                  aspectRatio: String(aspectRatio),
+                  backgroundColor: settings.backgroundColor,
+                  border: `${borderWidths[settings.borderStyle] ?? "0px"} solid ${settings.borderColor}`,
+                }}
+              >
+                {/* Header */}
+                {settings.headerEnabled && (
+                  <div className="absolute left-0 right-0 flex flex-col"
+                    style={{ top: `${(mt / ph) * 100}%`, paddingLeft: `${(ml / pw) * 100}%`, paddingRight: `${(mr / pw) * 100}%` }}>
+                    {headerText && <p className="text-[8px] leading-tight truncate" style={{ color: "#595959" }}>{headerText}</p>}
+                    <div className="mt-0.5" style={{ height: "0.4px", backgroundColor: "#ccc" }} />
+                  </div>
+                )}
+
+                {/* Image / loading skeleton */}
+                <div className="absolute flex items-center justify-center overflow-hidden"
+                  style={{
+                    top: `${((mt + HEADER_ZONE) / ph) * 100}%`,
+                    bottom: `${((mb + FOOTER_ZONE) / ph) * 100}%`,
+                    left: `${(ml / pw) * 100}%`,
+                    right: `${(mr / pw) * 100}%`,
+                  }}
+                >
+                  {url ? (
+                    <img src={url} alt={`Page ${i + 1}`} draggable={false}
+                      className="max-w-full max-h-full object-contain"
+                      style={{
+                        marginLeft: settings.alignment === "left" ? 0 : settings.alignment === "right" ? "auto" : "auto",
+                        marginRight: settings.alignment === "right" ? 0 : settings.alignment === "left" ? "auto" : "auto",
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-muted/40 animate-pulse rounded" />
+                  )}
+                </div>
+
+                {/* Watermark */}
+                {settings.watermarkEnabled && settings.watermarkText && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                    <span className="font-bold whitespace-nowrap select-none"
+                      style={{
+                        fontSize: `${(settings.watermarkFontSize / ph) * 100}cqh`,
+                        opacity: settings.watermarkOpacity,
+                        transform: `rotate(${settings.watermarkRotation}deg)`,
+                        color: "#666",
+                        position: settings.watermarkPos !== "center" ? "absolute" : undefined,
+                        top: settings.watermarkPos.startsWith("top") ? `${((mt + 24) / ph) * 100}%` : undefined,
+                        bottom: settings.watermarkPos.startsWith("bottom") ? `${((mb + 24) / ph) * 100}%` : undefined,
+                        left: settings.watermarkPos.endsWith("left") ? `${((ml + 24) / pw) * 100}%` : undefined,
+                        right: settings.watermarkPos.endsWith("right") ? `${((mr + 24) / pw) * 100}%` : undefined,
+                      } as React.CSSProperties}
+                    >
+                      {settings.watermarkText}
+                    </span>
+                  </div>
+                )}
+
+                {/* Footer */}
+                {(settings.footerEnabled || settings.pageNumberPos !== "none") && (
+                  <div className="absolute left-0 right-0 flex items-end"
+                    style={{
+                      bottom: `${(mb / ph) * 100}%`,
+                      paddingLeft: `${(ml / pw) * 100}%`,
+                      paddingRight: `${(mr / pw) * 100}%`,
+                      height: `${(FOOTER_ZONE / ph) * 100}%`,
+                    }}
+                  >
+                    <div className="w-full flex items-center justify-between">
+                      {settings.footerEnabled && settings.footerText
+                        ? <p className="text-[8px] truncate" style={{ color: "#595959", maxWidth: "60%" }}>{settings.footerText}</p>
+                        : <span />}
+                      {pageNumStr && (
+                        <p className="text-[8px]" style={{ color: "#666",
+                          marginLeft: settings.pageNumberPos === "bottom-center" ? "auto" : undefined,
+                          marginRight: settings.pageNumberPos === "bottom-left" ? "auto" : undefined,
+                        }}>{pageNumStr}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
