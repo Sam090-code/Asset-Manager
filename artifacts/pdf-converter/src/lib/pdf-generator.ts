@@ -185,6 +185,26 @@ export async function generatePdf(
   return pdfDoc.save();
 }
 
+export async function imagesToPdf(
+  images: Array<{ id: string; dataUrl: string; rotation: number }>,
+  options: { pageSize: 'A4' | 'Letter' | 'Legal'; orientation: 'portrait' | 'landscape'; margin: number },
+): Promise<Uint8Array> {
+  const m = options.margin;
+  const settings: DocSettings = {
+    ...DEFAULT_SETTINGS,
+    pageSize: options.pageSize,
+    orientation: options.orientation,
+    margins: { top: m, right: m, bottom: m, left: m },
+  };
+  const processed = await Promise.all(
+    images.map((img) =>
+      processImageItem({ dataUrl: img.dataUrl, rotation: img.rotation, flipH: false, flipV: false, brightness: 100, contrast: 100, saturation: 100 })
+        .then((processedDataUrl) => ({ processedDataUrl }))
+    )
+  );
+  return generatePdf(processed, settings);
+}
+
 export async function processImageItem(item: {
   dataUrl: string; rotation: number; flipH: boolean; flipV: boolean;
   brightness: number; contrast: number; saturation: number;
