@@ -27,6 +27,14 @@ const OTHER_FEATURES = [
     badge: "New",
     color: "bg-rose-50 text-rose-600",
   },
+  {
+    href: "/pdf-merge",
+    label: "PDF Merger",
+    description: "Combine multiple PDFs into one file — drag to reorder pages.",
+    icon: Merge,
+    badge: undefined,
+    color: "bg-violet-50 text-violet-600",
+  },
 ];
 
 function ExploreMenu() {

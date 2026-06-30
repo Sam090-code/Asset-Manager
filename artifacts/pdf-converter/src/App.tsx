@@ -184,6 +184,7 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/history" component={HistoryPage} />
       <Route path="/video-compress" component={VideoCompressPage} />
+      <Route path="/pdf-merge" component={PdfMergePage} />
 
       <Route component={NotFound} />
     </Switch>
