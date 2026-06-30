@@ -102,6 +102,25 @@ export default function VideoCompressPage() {
     if (f) onFileSelect(f);
   }, [onFileSelect]);
 
+  const download = useCallback(async () => {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`${BASE}/api/compress-video/${jobId}/download`);
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Download failed — please try again.");
+    }
+  }, [jobId, downloadName]);
+
   const compress = useCallback(async () => {
     if (!file) return;
     setStage("uploading");
@@ -346,10 +365,8 @@ export default function VideoCompressPage() {
                 </div>
 
                 <div className="flex gap-3">
-                  <Button asChild className="flex-1 gap-2 bg-rose-600 hover:bg-rose-700">
-                    <a href={`${BASE}/api/compress-video/${jobId}/download`} download={downloadName}>
-                      <Download className="h-4 w-4" /> Download MP4
-                    </a>
+                  <Button className="flex-1 gap-2 bg-rose-600 hover:bg-rose-700" onClick={download}>
+                    <Download className="h-4 w-4" /> Download MP4
                   </Button>
                   <Button variant="outline" onClick={reset}>Compress another</Button>
                 </div>

@@ -22,7 +22,7 @@ const OTHER_FEATURES = [
   {
     href: "/video-compress",
     label: "Video Compressor",
-    description: "Shrink any video right in your browser — no upload needed.",
+    description: "Shrink MP4, MOV, AVI and more with FFmpeg — server-side fast compression.",
     icon: Film,
     badge: "New",
     color: "bg-rose-50 text-rose-600",
